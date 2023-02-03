@@ -111,7 +111,7 @@ class Breadboard(ModuleCog):
             return
 
         starboard_webhook = (
-            list(filter(lambda x: x.name == "Starboard", starboard_webhooks))[0]
+            next(filter(lambda x: x.name == "Starboard", starboard_webhooks))
             or await starboard_channel.create_webhook(name="Starboard")
         )
 
