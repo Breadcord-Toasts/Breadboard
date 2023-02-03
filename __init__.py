@@ -32,14 +32,13 @@ class Breadboard(ModuleCog):
         )
 
     async def _fetch(
-        self, *, guild: discord.Guild | int = None, channel: discord.abc.GuildChannel | int, message: int = None
+        self, *, channel: discord.abc.GuildChannel | int, message: int = None
     ) -> discord.abc.GuildChannel | discord.Message | discord.WebhookMessage:
-        if not isinstance(channel, discord.abc.GuildChannel):
-            fetched_guild = await self.bot.fetch_guild(guild.id if isinstance(guild, discord.Guild) else guild)
-            fetched_channel = await fetched_guild.fetch_channel(channel)
-        else:
-            fetched_channel = channel
-
+        fetched_channel = (
+            channel
+            if isinstance(channel, discord.abc.GuildChannel)
+            else await self.bot.fetch_channel(channel)
+        )
         if message is not None:
             return await fetched_channel.fetch_message(message.id if isinstance(message, discord.Message) else message)
         return fetched_channel
