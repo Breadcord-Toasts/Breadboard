@@ -1,0 +1,8 @@
+# These are the emojis the bot will look for
+# These can also be custom emojis, not just unicode emojis
+accepted_emojis = ["⭐", "🌠", "🌟", "💫", "✨", "📌", "📍"]
+
+# The id for the guild the starboard channel is in
+starboard_guild = 1111111111111111111
+# The id for the channel to send starboard messages to
+starboard_channel = 1111111111111111111
