@@ -1,5 +1,5 @@
-import sqlite3
 import contextlib
+import sqlite3
 
 import discord
 
@@ -35,9 +35,7 @@ class Breadboard(ModuleCog):
         self, *, channel: discord.abc.GuildChannel | int, message: int = None
     ) -> discord.abc.GuildChannel | discord.Message | discord.WebhookMessage:
         fetched_channel = (
-            channel
-            if isinstance(channel, discord.abc.GuildChannel)
-            else await self.bot.fetch_channel(channel)
+            channel if isinstance(channel, discord.abc.GuildChannel) else await self.bot.fetch_channel(channel)
         )
         if message is not None:
             return await fetched_channel.fetch_message(message.id if isinstance(message, discord.Message) else message)
@@ -83,10 +81,11 @@ class Breadboard(ModuleCog):
         # Put before anything else so that the message is fetched as early as possible
         # Thus, the bot is less likely to error due to the message being deleted before it could be fetched
         starred_message = await self._fetch(
-            guild=reaction.guild_id, channel=reaction.channel_id, message=reaction.message_id
+            channel=reaction.channel_id, message=reaction.message_id
         )
 
         # TODO: Remove this and allow for specifying a starboard for multiple guilds once andrew fixes his framework
+        #  this means that starboard_guild can also be removed, as it's not rly used
         if reaction.guild_id != self.module_settings.starboard_guild.value:
             return
 
@@ -99,7 +98,7 @@ class Breadboard(ModuleCog):
         star_count = len(dict.fromkeys(star_reactions))
 
         starboard_channel = await self._fetch(
-            guild=self.module_settings.starboard_guild.value, channel=self.module_settings.starboard_channel.value
+            channel=self.module_settings.starboard_channel.value
         )
 
         try:
@@ -111,9 +110,10 @@ class Breadboard(ModuleCog):
             )
             return
 
-        if not (starboard_webhook := list(filter(lambda x: x.name == "Starboard", starboard_webhooks))):
-            starboard_webhook = [await starboard_channel.create_webhook(name="Starboard")]
-        starboard_webhook = starboard_webhook[0]
+        starboard_webhook = (
+            list(filter(lambda x: x.name == "Starboard", starboard_webhooks))[0]
+            or await starboard_channel.create_webhook(name="Starboard")
+        )
 
         if starred_message.webhook_id == starboard_webhook.id:
             return
