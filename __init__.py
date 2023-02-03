@@ -20,9 +20,7 @@ class OriginalMessageButton(discord.ui.View):
 class Breadboard(ModuleCog):
     def __init__(self, name: str | None = None) -> None:
         super().__init__(name)
-
         self.module_settings = self.bot.settings.Breadboard
-
         self.connection = sqlite3.connect(self.module.storage_path / "starred_messages.db")
         self.cursor = self.connection.cursor()
         self.cursor.execute(
@@ -109,7 +107,7 @@ class Breadboard(ModuleCog):
             starboard_webhooks = await starboard_channel.webhooks()
         except discord.Forbidden:
             self.logger.warn(
-                f"Bot doesn't have permissions to manage webhooks in the specified starboard channel."
+                f"Bot doesn't have permissions to manage webhooks in the specified starboard channel. "
                 f"Channel {self.module_settings.starboard_channel} in guild {self.module_settings.starboard_guild}"
             )
             return
