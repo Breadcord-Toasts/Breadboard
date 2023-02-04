@@ -61,8 +61,6 @@ class Breadboard(ModuleCog):
         except sqlite3.IntegrityError:
             await sent_message.delete()
 
-
-
     async def update_message(
         self,
         starred_message: discord.Message,
