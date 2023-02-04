@@ -3,6 +3,6 @@ manifest_version = 1
 [module]
 name = "Breadboard"
 description = "A starboard module for Breadcord. Breadboard."
-version = "0.1.0"
+version = "1.0.0"
 license = "GNU GPLv3"
 authors = ["Fripe"]
