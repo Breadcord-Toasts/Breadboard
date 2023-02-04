@@ -52,12 +52,16 @@ class Breadboard(ModuleCog):
             view=OriginalMessageButton(starred_message.jump_url, star_count),
             wait=True,
         )
+        try:
+            self.cursor.execute(
+                "INSERT INTO starred_messages VALUES (?, ?, ?)",
+                (starred_message.id, sent_message.id, starred_message.guild.id),
+            )
+            self.connection.commit()
+        except sqlite3.IntegrityError:
+            await sent_message.delete()
 
-        self.cursor.execute(
-            "INSERT INTO starred_messages VALUES (?, ?, ?)",
-            (starred_message.id, sent_message.id, starred_message.guild.id),
-        )
-        self.connection.commit()
+
 
     async def update_message(
         self,
@@ -98,9 +102,7 @@ class Breadboard(ModuleCog):
             star_reactions.extend([user async for user in star_reaction.users()])
         star_count = len(dict.fromkeys(star_reactions))
 
-        starboard_channel = await self._fetch(
-            channel=self.module_settings.starboard_channel.value
-        )
+        starboard_channel = await self._fetch(channel=self.module_settings.starboard_channel.value)
 
         try:
             starboard_webhooks = await starboard_channel.webhooks()
