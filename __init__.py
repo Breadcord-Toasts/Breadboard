@@ -78,11 +78,12 @@ class Breadboard(ModuleCog):
             self.cursor.execute("DELETE FROM starred_messages WHERE original_id = ?", (starred_message.id,))
 
     async def on_reaction_update(self, reaction: discord.RawReactionActionEvent) -> None:
-        # Put before anything else so that the message is fetched as early as possible
-        # Thus, the bot is less likely to error due to the message being deleted before it could be fetched
-        starred_message = await self._fetch(
-            channel=reaction.channel_id, message=reaction.message_id
-        )
+        try:
+            # Put before anything else so that the message is fetched as early as possible
+            # Thus, the bot is less likely to error due to the message being deleted before it could be fetched
+            starred_message = await self._fetch(channel=reaction.channel_id, message=reaction.message_id)
+        except discord.errors.NotFound:
+            return
 
         # TODO: Remove this and allow for specifying a starboard for multiple guilds once andrew fixes his framework
         #  this means that starboard_guild can also be removed, as it's not rly used
