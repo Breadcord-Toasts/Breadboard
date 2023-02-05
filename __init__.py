@@ -99,6 +99,8 @@ class Breadboard(ModuleCog):
         ):
             star_reactions.extend([user async for user in star_reaction.users()])
         star_count = len(dict.fromkeys(star_reactions))
+        if star_count < self.module_settings.required_stars.value:
+            return
 
         starboard_channel = await self._fetch(channel=self.module_settings.starboard_channel.value)
 
@@ -111,10 +113,9 @@ class Breadboard(ModuleCog):
             )
             return
 
-        starboard_webhook = (
-            next(filter(lambda x: x.name == "Starboard", starboard_webhooks))
-            or await starboard_channel.create_webhook(name="Starboard")
-        )
+        if not (starboard_webhook := list(filter(lambda x: x.name == "Starboard", starboard_webhooks))):
+            starboard_webhook = [await starboard_channel.create_webhook(name="Starboard")]
+        starboard_webhook = starboard_webhook[0]
 
         if starred_message.webhook_id == starboard_webhook.id:
             return
