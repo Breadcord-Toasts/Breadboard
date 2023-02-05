@@ -8,11 +8,11 @@ from breadcord.module import ModuleCog
 
 
 class OriginalMessageButton(discord.ui.View):
-    def __init__(self, url: str, star_count: int):
+    def __init__(self, url: str, star_count: int, star_emoji: str = "⭐"):
         super().__init__()
         self.add_item(
             discord.ui.Button(
-                label=f"{star_count} | Original Message", url=url, style=discord.ButtonStyle.link, emoji="⭐"
+                label=f"{star_count} | Original Message", url=url, style=discord.ButtonStyle.link, emoji=star_emoji
             )
         )
 
@@ -49,7 +49,9 @@ class Breadboard(ModuleCog):
             embeds=starred_message.embeds,
             files=[await attachment.to_file() for attachment in starred_message.attachments],
             username=starred_message.author.display_name,
-            view=OriginalMessageButton(starred_message.jump_url, star_count),
+            view=OriginalMessageButton(
+                starred_message.jump_url, star_count, self.module_settings.accepted_emojis.value[0]
+            ),
             wait=True,
         )
         try:
@@ -70,7 +72,10 @@ class Breadboard(ModuleCog):
     ) -> None:
         if star_count >= self.module_settings.required_stars.value:
             await webhook.edit_message(
-                starboard_message_id, view=OriginalMessageButton(starred_message.jump_url, star_count)
+                starboard_message_id,
+                view=OriginalMessageButton(
+                    starred_message.jump_url, star_count, self.module_settings.accepted_emojis.value[0]
+                ),
             )
             self.cursor.execute("UPDATE starred_messages SET star_count = ?", (star_count,))
             self.connection.commit()
