@@ -7,3 +7,4 @@ description = "A starboard module for Breadcord. Breadboard."
 version = "1.0.0"
 license = "GNU GPLv3"
 authors = ["Fripe"]
+permissions = ["manage_webhooks"]
