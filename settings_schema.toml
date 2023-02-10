@@ -6,7 +6,7 @@ accepted_emojis = ["⭐", "🌠", "🌟", "💫", "✨", "📌", "📍"]
 required_stars = 3
 
 # The id for the guild the starboard channel is in
-starboard_guild = 0000000000000000000
+starboard_guild = 1111111111111111111
 
 # The id for the channel to send starboard messages to
-starboard_channel = 0000000000000000000
+starboard_channel = 11111111111111111111

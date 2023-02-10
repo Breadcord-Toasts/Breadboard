@@ -18,9 +18,9 @@ class OriginalMessageButton(discord.ui.View):
 
 
 class Breadboard(ModuleCog):
-    def __init__(self, name: str | None = None) -> None:
-        super().__init__(name)
-        self.module_settings = self.bot.settings.Breadboard
+    def __init__(self, module_id: str):
+        super().__init__(module_id)
+        self.module_settings = self.bot.settings.breadboard
         self.connection = sqlite3.connect(self.module.storage_path / "starred_messages.db")
         self.cursor = self.connection.cursor()
         self.cursor.execute(
@@ -156,4 +156,4 @@ class Breadboard(ModuleCog):
 
 
 async def setup(bot: breadcord.Bot):
-    await bot.add_cog(Breadboard())
+    await bot.add_cog(Breadboard("breadboard"))
