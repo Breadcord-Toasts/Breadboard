@@ -77,8 +77,9 @@ class Breadboard(ModuleCog):
         star_count: int,
     ) -> None:
         starboard_message = await webhook.fetch_message(starboard_message_id)
+
         star_emoji = next(
-            filter(lambda component: isinstance(component, discord.Button), starboard_message.components)
+            filter(lambda component: isinstance(component, discord.Button), starboard_message.components[0].children)
         ).emoji
 
         if star_count >= self.module_settings.required_stars.value:
