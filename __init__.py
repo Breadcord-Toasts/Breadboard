@@ -100,7 +100,7 @@ class Breadboard(ModuleCog):
         # This counts the number of star reactions, counting each unique user only once
         star_reactions = []
         for star_reaction in filter(
-            lambda r: r.emoji in self.module_settings.accepted_emojis.value, starred_message.reactions
+            lambda r: str(r.emoji) in self.module_settings.accepted_emojis.value, starred_message.reactions
         ):
             star_reactions.extend([user async for user in star_reaction.users()])
         star_count = len(dict.fromkeys(star_reactions))
