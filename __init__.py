@@ -104,8 +104,6 @@ class Breadboard(ModuleCog):
         ):
             star_reactions.extend([user async for user in star_reaction.users()])
         star_count = len(dict.fromkeys(star_reactions))
-        if star_count < self.module_settings.required_stars.value:
-            return
 
         starboard_channel = await self._fetch(channel=self.module_settings.starboard_channel.value)
 
