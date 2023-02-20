@@ -41,7 +41,13 @@ class Breadboard(ModuleCog):
             return await fetched_channel.fetch_message(message.id if isinstance(message, discord.Message) else message)
         return fetched_channel
 
-    async def create_message(self, starred_message: discord.Message, webhook: discord.Webhook, star_count: int) -> None:
+    async def create_message(
+        self,
+        starred_message: discord.Message,
+        webhook: discord.Webhook,
+        star_count: int,
+        star_emoji: discord.PartialEmoji | discord.Emoji | str,
+    ) -> None:
         sent_message = await webhook.send(
             allowed_mentions=discord.AllowedMentions.none(),
             avatar_url=starred_message.author.avatar.url,
@@ -70,12 +76,14 @@ class Breadboard(ModuleCog):
         webhook: discord.Webhook,
         star_count: int,
     ) -> None:
+        starboard_message = await webhook.fetch_message(starboard_message_id)
+        star_emoji = next(
+            filter(lambda component: isinstance(component, discord.Button), starboard_message.components)
+        ).emoji
+
         if star_count >= self.module_settings.required_stars.value:
-            await webhook.edit_message(
-                starboard_message_id,
-                view=OriginalMessageButton(
-                    starred_message.jump_url, star_count, self.module_settings.accepted_emojis.value[0]
-                ),
+            await starboard_message.edit(
+                view=OriginalMessageButton(starred_message.jump_url, star_count, star_emoji),
             )
             self.cursor.execute("UPDATE starred_messages SET star_count = ?", (star_count,))
             self.connection.commit()
@@ -98,10 +106,13 @@ class Breadboard(ModuleCog):
             return
 
         # This counts the number of star reactions, counting each unique user only once
+        reacted_star_emojis = filter(
+            lambda r: str(r.emoji) in self.module_settings.accepted_emojis.value,
+            starred_message.reactions
+        )
+        star_emoji = sorted(reacted_star_emojis, key=lambda x: x.count)[0]
         star_reactions = []
-        for star_reaction in filter(
-            lambda r: str(r.emoji) in self.module_settings.accepted_emojis.value, starred_message.reactions
-        ):
+        for star_reaction in reacted_star_emojis:
             star_reactions.extend([user async for user in star_reaction.users()])
         star_count = len(dict.fromkeys(star_reactions))
 
@@ -129,7 +140,7 @@ class Breadboard(ModuleCog):
         ).fetchone()
 
         if response is None and star_count >= self.module_settings.required_stars.value:
-            await self.create_message(starred_message, starboard_webhook, star_count)
+            await self.create_message(starred_message, starboard_webhook, star_count, star_emoji)
         elif response is not None:
             if response[1] == star_count:
                 return
