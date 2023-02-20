@@ -56,7 +56,7 @@ class Breadboard(ModuleCog):
             files=[await attachment.to_file() for attachment in starred_message.attachments],
             username=starred_message.author.display_name,
             view=OriginalMessageButton(
-                starred_message.jump_url, star_count, self.module_settings.accepted_emojis.value[0]
+                starred_message.jump_url, star_count, star_emoji
             ),
             wait=True,
         )
@@ -107,18 +107,21 @@ class Breadboard(ModuleCog):
             return
 
         # This counts the number of star reactions, counting each unique user only once
-        reacted_star_emojis = filter(
+        reacted_star_emojis = list(filter(
             lambda r: str(r.emoji) in self.module_settings.accepted_emojis.value,
             starred_message.reactions
-        )
-        star_emoji = sorted(reacted_star_emojis, key=lambda x: x.count)[0]
+        ))
+        if reacted_star_emojis:
+            star_emoji = sorted(reacted_star_emojis, key=lambda x: x.count)[0].emoji
+        else:
+            star_emoji = None
+
         star_reactions = []
         for star_reaction in reacted_star_emojis:
             star_reactions.extend([user async for user in star_reaction.users()])
         star_count = len(dict.fromkeys(star_reactions))
 
         starboard_channel = await self._fetch(channel=self.module_settings.starboard_channel.value)
-
         try:
             starboard_webhooks = await starboard_channel.webhooks()
         except discord.Forbidden:
