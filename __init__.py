@@ -77,7 +77,13 @@ class Breadboard(ModuleCog):
         star_count: int,
     ) -> None:
         if star_count >= self.module_settings.required_stars.value:
-            starboard_message = await webhook.fetch_message(starboard_message_id)
+            try:
+                starboard_message = await webhook.fetch_message(starboard_message_id)
+            except discord.NotFound:
+                self.cursor.execute("DELETE FROM starred_messages WHERE original_id = ?", (starred_message.id,))
+                self.connection.commit()
+                return
+
             star_emoji = next(
                 filter(lambda component: isinstance(component, discord.Button), starboard_message.components[0].children)
             ).emoji
@@ -86,11 +92,11 @@ class Breadboard(ModuleCog):
                 view=OriginalMessageButton(starred_message.jump_url, star_count, star_emoji),
             )
             self.cursor.execute("UPDATE starred_messages SET star_count = ?", (star_count,))
-            self.connection.commit()
         else:
             with contextlib.suppress(discord.NotFound):
                 await webhook.delete_message(starboard_message_id)
             self.cursor.execute("DELETE FROM starred_messages WHERE original_id = ?", (starred_message.id,))
+        self.connection.commit()
 
     async def on_reaction_update(self, reaction: discord.RawReactionActionEvent) -> None:
         try:
