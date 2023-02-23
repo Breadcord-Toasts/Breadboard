@@ -20,7 +20,7 @@ class OriginalMessageButton(discord.ui.View):
 class Breadboard(ModuleCog):
     def __init__(self, module_id: str):
         super().__init__(module_id)
-        self.module_settings = self.bot.settings.breadboard
+        self.module_settings = self.bot.settings.get_child(module_id)
         self.connection = sqlite3.connect(self.module.storage_path / "starred_messages.db")
         self.cursor = self.connection.cursor()
         self.cursor.execute(
@@ -55,9 +55,7 @@ class Breadboard(ModuleCog):
             embeds=starred_message.embeds,
             files=[await attachment.to_file() for attachment in starred_message.attachments],
             username=starred_message.author.display_name,
-            view=OriginalMessageButton(
-                starred_message.jump_url, star_count, star_emoji
-            ),
+            view=OriginalMessageButton(starred_message.jump_url, star_count, star_emoji),
             wait=True,
         )
         try:
@@ -85,7 +83,9 @@ class Breadboard(ModuleCog):
                 return
 
             star_emoji = next(
-                filter(lambda component: isinstance(component, discord.Button), starboard_message.components[0].children)
+                filter(
+                    lambda component: isinstance(component, discord.Button), starboard_message.components[0].children
+                )
             ).emoji
 
             await starboard_message.edit(
@@ -112,10 +112,9 @@ class Breadboard(ModuleCog):
             return
 
         # This counts the number of star reactions, counting each unique user only once
-        reacted_star_emojis = list(filter(
-            lambda r: str(r.emoji) in self.module_settings.accepted_emojis.value,
-            starred_message.reactions
-        ))
+        reacted_star_emojis = list(
+            filter(lambda r: str(r.emoji) in self.module_settings.accepted_emojis.value, starred_message.reactions)
+        )
         if reacted_star_emojis:
             star_emoji = sorted(reacted_star_emojis, key=lambda x: x.count)[0].emoji
         else:
