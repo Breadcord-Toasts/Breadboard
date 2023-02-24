@@ -4,21 +4,31 @@ import sqlite3
 import discord
 
 import breadcord
+from breadcord.config import SettingsGroup
 from breadcord.module import ModuleCog
 
 
 class OriginalMessageButton(discord.ui.View):
-    def __init__(self, url: str, star_count: int, star_emoji: str = "⭐"):
+    def __init__(
+        self,
+        *,
+        original_message_url: str,
+        star_count: int,
+        star_emoji: discord.PartialEmoji | discord.Emoji | str = "⭐",
+    ) -> None:
         super().__init__()
         self.add_item(
             discord.ui.Button(
-                label=f"{star_count} | Original Message", url=url, style=discord.ButtonStyle.link, emoji=star_emoji
+                label=f"{star_count} | Original Message",
+                url=original_message_url,
+                style=discord.ButtonStyle.link,
+                emoji=star_emoji,
             )
         )
 
 
 class Breadboard(ModuleCog):
-    def __init__(self, module_id: str):
+    def __init__(self, module_id: str) -> None:
         super().__init__(module_id)
         self.module_settings = self.bot.settings.get_child(module_id)
         self.connection = sqlite3.connect(self.module.storage_path / "starred_messages.db")
@@ -30,130 +40,160 @@ class Breadboard(ModuleCog):
             "   star_count INTEGER NOT NULL"
             ")"
         )
+        self.connection.commit()
 
-    async def _fetch(
-        self, *, channel: discord.abc.GuildChannel | int, message: int = None
+    async def fetch(
+        self, *, channel: discord.abc.GuildChannel | int, message: int | discord.Message | None = None
     ) -> discord.abc.GuildChannel | discord.Message | discord.WebhookMessage:
         fetched_channel = (
             channel if isinstance(channel, discord.abc.GuildChannel) else await self.bot.fetch_channel(channel)
         )
         if message is not None:
+            if not isinstance(fetched_channel, discord.abc.Messageable):
+                raise TypeError(
+                    f"The supplied channel of type {fetched_channel.__class__.__name__} can't have messages."
+                )
             return await fetched_channel.fetch_message(message.id if isinstance(message, discord.Message) else message)
         return fetched_channel
 
-    async def create_message(
-        self,
-        starred_message: discord.Message,
-        webhook: discord.Webhook,
-        star_count: int,
-        star_emoji: discord.PartialEmoji | discord.Emoji | str,
+    def filter_reactions(self, reactions: list[discord.Reaction]) -> list[discord.Reaction]:
+        def is_accepted(reaction: discord.Reaction) -> bool:
+            return str(reaction.emoji) in self.module_settings.accepted_emojis.value
+
+        def get_count(reaction: discord.Reaction) -> int:
+            return reaction.count
+
+        return sorted(filter(is_accepted, reactions), key=get_count, reverse=True)
+
+    @staticmethod
+    async def unique_reactions(reactions: list[discord.Reaction]) -> int:
+        reactions_users = set()
+        for reaction in reactions:
+            async for user in reaction.users():
+                reactions_users.add(user)
+
+        return len(reactions_users)
+
+    def get_required_reactions(self, channel_id: int) -> int:
+        requirement = self.module_settings.required_stars.value
+        special_channels: SettingsGroup = self.module_settings.special_channel_requirements
+
+        if str(channel_id) in special_channels.keys():
+            requirement = special_channels.get(str(channel_id)).value
+
+        return requirement
+
+    async def create_starboard_message(
+        self, starred_message: discord.Message, webhook: discord.Webhook, button: discord.ui.View, star_count: int
     ) -> None:
-        sent_message = await webhook.send(
+        avatar = starred_message.author.avatar
+
+        starboard_message = await webhook.send(
             allowed_mentions=discord.AllowedMentions.none(),
-            avatar_url=starred_message.author.avatar.url,
+            avatar_url=avatar.url if avatar else None,
             content=starred_message.content,
             embeds=starred_message.embeds,
             files=[await attachment.to_file() for attachment in starred_message.attachments],
             username=starred_message.author.display_name,
-            view=OriginalMessageButton(starred_message.jump_url, star_count, star_emoji),
+            view=button,
             wait=True,
         )
         try:
             self.cursor.execute(
                 "INSERT INTO starred_messages VALUES (?, ?, ?)",
-                (starred_message.id, sent_message.id, starred_message.guild.id),
+                (starred_message.id, starboard_message.id, star_count),
             )
             self.connection.commit()
         except sqlite3.IntegrityError:
-            await sent_message.delete()
+            # How did we get here?
+            await starboard_message.delete()
 
-    async def update_message(
+    async def delete_starboard_message(
+        self, starred_message_id: int, starboard_webhook: discord.Webhook, starboard_message_id: int
+    ) -> None:
+        with contextlib.suppress(discord.NotFound):
+            await starboard_webhook.delete_message(starboard_message_id)
+        self.cursor.execute("DELETE FROM starred_messages WHERE original_id = ?", (starred_message_id,))
+        self.connection.commit()
+
+    async def update_starboard_message_button(
         self,
-        starred_message: discord.Message,
+        starred_message_id: int,
         starboard_message_id: int,
         webhook: discord.Webhook,
+        button: discord.ui.View,
         star_count: int,
     ) -> None:
-        if star_count >= self.module_settings.required_stars.value:
-            try:
-                starboard_message = await webhook.fetch_message(starboard_message_id)
-            except discord.NotFound:
-                self.cursor.execute("DELETE FROM starred_messages WHERE original_id = ?", (starred_message.id,))
-                self.connection.commit()
-                return
+        try:
+            starboard_message = await webhook.fetch_message(starboard_message_id)
+        except discord.NotFound:
+            self.cursor.execute("DELETE FROM starred_messages WHERE original_id = ?", (starred_message_id,))
+            self.connection.commit()
+            return
 
-            star_emoji = next(
-                filter(
-                    lambda component: isinstance(component, discord.Button), starboard_message.components[0].children
-                )
-            ).emoji
-
-            await starboard_message.edit(
-                view=OriginalMessageButton(starred_message.jump_url, star_count, star_emoji),
-            )
-            self.cursor.execute("UPDATE starred_messages SET star_count = ?", (star_count,))
-        else:
-            with contextlib.suppress(discord.NotFound):
-                await webhook.delete_message(starboard_message_id)
-            self.cursor.execute("DELETE FROM starred_messages WHERE original_id = ?", (starred_message.id,))
+        await starboard_message.edit(view=button)
+        self.cursor.execute("UPDATE starred_messages SET star_count = ?", (star_count,))
         self.connection.commit()
 
     async def on_reaction_update(self, reaction: discord.RawReactionActionEvent) -> None:
         try:
             # Put before anything else so that the message is fetched as early as possible
             # Thus, the bot is less likely to error due to the message being deleted before it could be fetched
-            starred_message = await self._fetch(channel=reaction.channel_id, message=reaction.message_id)
+            starred_message = await self.fetch(channel=reaction.channel_id, message=reaction.message_id)
         except discord.errors.NotFound:
             return
 
-        # TODO: Remove this and allow for specifying a starboard for multiple guilds once andrew fixes his framework
-        #  this means that starboard_guild can also be removed, as it's not rly used
-        if reaction.guild_id != self.module_settings.starboard_guild.value:
+        if str(reaction.guild_id) not in self.module_settings.starboard_channels.keys():
             return
 
-        # This counts the number of star reactions, counting each unique user only once
-        reacted_star_emojis = list(
-            filter(lambda r: str(r.emoji) in self.module_settings.accepted_emojis.value, starred_message.reactions)
-        )
-        if reacted_star_emojis:
-            star_emoji = sorted(reacted_star_emojis, key=lambda x: x.count)[0].emoji
-        else:
-            star_emoji = None
+        starboard_channel_id: int = self.module_settings.starboard_channels.get(str(reaction.guild_id)).value
+        starboard_channel = await self.bot.fetch_channel(starboard_channel_id)
 
-        star_reactions = []
-        for star_reaction in reacted_star_emojis:
-            star_reactions.extend([user async for user in star_reaction.users()])
-        star_count = len(dict.fromkeys(star_reactions))
+        star_reactions = self.filter_reactions(starred_message.reactions)
+        unique_reactions = await self.unique_reactions(star_reactions)
+        required_reactions = self.get_required_reactions(starred_message.channel.id)
 
-        starboard_channel = await self._fetch(channel=self.module_settings.starboard_channel.value)
+        if required_reactions == -1:
+            return
+
         try:
-            starboard_webhooks = await starboard_channel.webhooks()
+            starboard_webhooks = list(filter(lambda x: x.name == "Starboard", await starboard_channel.webhooks()))
         except discord.Forbidden:
-            self.logger.warn(
+            return self.logger.warn(
                 f"Bot doesn't have permissions to manage webhooks in the specified starboard channel. "
                 f"Channel {self.module_settings.starboard_channel} in guild {self.module_settings.starboard_guild}"
             )
-            return
+        starboard_webhook = (
+            starboard_webhooks[0] if starboard_webhooks else await starboard_channel.create_webhook(name="Starboard")
+        )
 
-        if not (starboard_webhook := list(filter(lambda x: x.name == "Starboard", starboard_webhooks))):
-            starboard_webhook = [await starboard_channel.create_webhook(name="Starboard")]
-        starboard_webhook = starboard_webhook[0]
-
+        # Don't repost starboard messages
         if starred_message.webhook_id == starboard_webhook.id:
             return
 
-        response = self.cursor.execute(
+        sql_response = self.cursor.execute(
             "SELECT starboard_message_id, star_count FROM starred_messages WHERE original_id = ?",
             (starred_message.id,),
         ).fetchone()
 
-        if response is None and star_count >= self.module_settings.required_stars.value:
-            await self.create_message(starred_message, starboard_webhook, star_count, star_emoji)
-        elif response is not None:
-            if response[1] == star_count:
-                return
-            else:
-                await self.update_message(starred_message, response[0], starboard_webhook, star_count)
+        if unique_reactions >= required_reactions:
+            button = OriginalMessageButton(
+                original_message_url=starred_message.jump_url,
+                star_count=unique_reactions,
+                star_emoji=star_reactions[0].emoji, # Index 0 is the most reacted with emoji
+            )
+            if sql_response is None: # Sufficient reactions and doesn't exist
+                await self.create_starboard_message(starred_message, starboard_webhook, button, unique_reactions)
+            else: # Sufficient reactions but does exist
+                starboard_message_id, old_star_count = sql_response
+                if old_star_count != unique_reactions:
+                    await self.update_starboard_message_button(
+                        starred_message.id, starboard_message_id, starboard_webhook, button, unique_reactions
+                    )
+        elif sql_response is not None: # Not enough reactions and does exist
+            starboard_message_id, old_star_count = sql_response
+            await self.delete_starboard_message(starred_message.id, starboard_webhook, starboard_message_id)
+
 
     @ModuleCog.listener()
     async def on_raw_reaction_add(self, reaction: discord.RawReactionActionEvent) -> None:

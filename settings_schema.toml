@@ -5,8 +5,15 @@ accepted_emojis = ["⭐", "🌠", "🌟", "💫", "✨", "📌", "📍"]
 # Number of star reactions required for the message to get put on the starboard
 required_stars = 3
 
-# The id for the guild the starboard channel is in
-starboard_guild = 1111111111111111111
+# The various starboard cahnnels the bot wil serve.
+# Keys are the guild IDs and the values are the respective starboard channel ID
+[starboard_channels]
+1111111111111111111 = 11111111111111111111
 
-# The id for the channel to send starboard messages to
-starboard_channel = 11111111111111111111
+# The various starboard cahnnels the bot wil serve.
+# Keys are the guild IDs and the values are the required star reactions
+# Set to -1 to disbale messages from the channel being put on the starboard
+# Optional!
+[special_channel_requirements]
+1111111111111111111 = 5
+
