@@ -66,11 +66,12 @@ class Breadboard(ModuleCog):
         return sorted(filter(is_accepted, reactions), key=get_count, reverse=True)
 
     @staticmethod
-    async def unique_reactions(reactions: list[discord.Reaction]) -> int:
+    async def unique_reactions(reactions: list[discord.Reaction], author_id: int) -> int:
         reactions_users = set()
         for reaction in reactions:
             async for user in reaction.users():
-                reactions_users.add(user)
+                if user.id != author_id:
+                    reactions_users.add(user)
 
         return len(reactions_users)
 
@@ -150,7 +151,7 @@ class Breadboard(ModuleCog):
         starboard_channel = await self.bot.fetch_channel(starboard_channel_id)
 
         star_reactions = self.filter_reactions(starred_message.reactions)
-        unique_reactions = await self.unique_reactions(star_reactions)
+        unique_reactions = await self.unique_reactions(star_reactions, starred_message.author.id)
         required_reactions = self.get_required_reactions(starred_message.channel.id)
 
         if required_reactions == -1:
