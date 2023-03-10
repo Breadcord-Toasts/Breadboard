@@ -158,15 +158,14 @@ class Breadboard(ModuleCog):
             return
 
         try:
-            starboard_webhooks = list(filter(lambda x: x.name == "Starboard", await starboard_channel.webhooks()))
+            starboard_webhook = discord.utils.find(lambda w: w.name == "Starboard", await starboard_channel.webhooks())
         except discord.Forbidden:
             return self.logger.warn(
                 f"Bot doesn't have permissions to manage webhooks in the specified starboard channel. "
                 f"Channel {self.module_settings.starboard_channel} in guild {self.module_settings.starboard_guild}"
             )
-        starboard_webhook = (
-            starboard_webhooks[0] if starboard_webhooks else await starboard_channel.create_webhook(name="Starboard")
-        )
+        if not starboard_webhook:
+            starboard_webhook = await starboard_channel.create_webhook(name="Starboard")
 
         # Don't repost starboard messages
         if starred_message.webhook_id == starboard_webhook.id:
