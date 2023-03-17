@@ -58,7 +58,7 @@ class Breadboard(ModuleCog):
 
     def filter_reactions(self, reactions: list[discord.Reaction]) -> list[discord.Reaction]:
         def is_accepted(reaction: discord.Reaction) -> bool:
-            return str(reaction.emoji) in selfsettings.accepted_emojis.value
+            return str(reaction.emoji) in self.settings.accepted_emojis.value
 
         def get_count(reaction: discord.Reaction) -> int:
             return reaction.count
@@ -76,8 +76,8 @@ class Breadboard(ModuleCog):
         return len(reactions_users)
 
     def get_required_reactions(self, channel_id: int) -> int:
-        requirement = selfsettings.required_stars.value
-        special_channels: SettingsGroup = selfsettings.special_channel_requirements
+        requirement = self.settings.required_stars.value
+        special_channels: SettingsGroup = self.settings.special_channel_requirements
 
         if str(channel_id) in special_channels.keys():
             requirement = special_channels.get(str(channel_id)).value
@@ -144,10 +144,10 @@ class Breadboard(ModuleCog):
         except discord.errors.NotFound:
             return
 
-        if str(reaction.guild_id) not in selfsettings.starboard_channels.keys():
+        if str(reaction.guild_id) not in self.settings.starboard_channels.keys():
             return
 
-        starboard_channel_id: int = selfsettings.starboard_channels.get(str(reaction.guild_id)).value
+        starboard_channel_id: int = self.settings.starboard_channels.get(str(reaction.guild_id)).value
         starboard_channel = await self.bot.fetch_channel(starboard_channel_id)
 
         star_reactions = self.filter_reactions(starred_message.reactions)
@@ -162,7 +162,7 @@ class Breadboard(ModuleCog):
         except discord.Forbidden:
             return self.logger.warn(
                 f"Bot doesn't have permissions to manage webhooks in the specified starboard channel. "
-                f"Channel {selfsettings.starboard_channel} in guild {selfsettings.starboard_guild}"
+                f"Channel {self.settings.starboard_channel} in guild {self.settings.starboard_guild}"
             )
         if not starboard_webhook:
             starboard_webhook = await starboard_channel.create_webhook(name="Starboard")
