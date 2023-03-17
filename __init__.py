@@ -30,7 +30,6 @@ class OriginalMessageButton(discord.ui.View):
 class Breadboard(ModuleCog):
     def __init__(self, module_id: str) -> None:
         super().__init__(module_id)
-        interaction.followup.send(
         self.connection = sqlite3.connect(self.module.storage_path / "starred_messages.db")
         self.cursor = self.connection.cursor()
         self.cursor.execute(
