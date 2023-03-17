@@ -30,7 +30,7 @@ class OriginalMessageButton(discord.ui.View):
 class Breadboard(ModuleCog):
     def __init__(self, module_id: str) -> None:
         super().__init__(module_id)
-        self.module_settings = self.bot.settings.get_child(module_id)
+        interaction.followup.send(
         self.connection = sqlite3.connect(self.module.storage_path / "starred_messages.db")
         self.cursor = self.connection.cursor()
         self.cursor.execute(
@@ -58,7 +58,7 @@ class Breadboard(ModuleCog):
 
     def filter_reactions(self, reactions: list[discord.Reaction]) -> list[discord.Reaction]:
         def is_accepted(reaction: discord.Reaction) -> bool:
-            return str(reaction.emoji) in self.module_settings.accepted_emojis.value
+            return str(reaction.emoji) in selfsettings.accepted_emojis.value
 
         def get_count(reaction: discord.Reaction) -> int:
             return reaction.count
@@ -76,8 +76,8 @@ class Breadboard(ModuleCog):
         return len(reactions_users)
 
     def get_required_reactions(self, channel_id: int) -> int:
-        requirement = self.module_settings.required_stars.value
-        special_channels: SettingsGroup = self.module_settings.special_channel_requirements
+        requirement = selfsettings.required_stars.value
+        special_channels: SettingsGroup = selfsettings.special_channel_requirements
 
         if str(channel_id) in special_channels.keys():
             requirement = special_channels.get(str(channel_id)).value
@@ -144,10 +144,10 @@ class Breadboard(ModuleCog):
         except discord.errors.NotFound:
             return
 
-        if str(reaction.guild_id) not in self.module_settings.starboard_channels.keys():
+        if str(reaction.guild_id) not in selfsettings.starboard_channels.keys():
             return
 
-        starboard_channel_id: int = self.module_settings.starboard_channels.get(str(reaction.guild_id)).value
+        starboard_channel_id: int = selfsettings.starboard_channels.get(str(reaction.guild_id)).value
         starboard_channel = await self.bot.fetch_channel(starboard_channel_id)
 
         star_reactions = self.filter_reactions(starred_message.reactions)
@@ -162,7 +162,7 @@ class Breadboard(ModuleCog):
         except discord.Forbidden:
             return self.logger.warn(
                 f"Bot doesn't have permissions to manage webhooks in the specified starboard channel. "
-                f"Channel {self.module_settings.starboard_channel} in guild {self.module_settings.starboard_guild}"
+                f"Channel {selfsettings.starboard_channel} in guild {selfsettings.starboard_guild}"
             )
         if not starboard_webhook:
             starboard_webhook = await starboard_channel.create_webhook(name="Starboard")
