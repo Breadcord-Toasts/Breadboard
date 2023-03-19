@@ -57,7 +57,12 @@ class Breadboard(ModuleCog):
 
     def filter_reactions(self, reactions: list[discord.Reaction]) -> list[discord.Reaction]:
         def is_accepted(reaction: discord.Reaction) -> bool:
-            return str(reaction.emoji) in self.settings.accepted_emojis.value
+            accepted_emojis: list = self.settings.accepted_emojis.value
+
+            with contextlib.suppress(KeyError):
+                accepted_emojis.extend(self.settings.special_guild_emojis.get(reaction.message.guild.id).value)
+
+            return str(reaction.emoji) in accepted_emojis
 
         def get_count(reaction: discord.Reaction) -> int:
             return reaction.count
