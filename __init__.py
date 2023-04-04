@@ -60,7 +60,7 @@ class Breadboard(ModuleCog):
             accepted_emojis: list = self.settings.accepted_emojis.value
 
             with contextlib.suppress(KeyError):
-                accepted_emojis.extend(self.settings.special_guild_emojis.get(reaction.message.guild.id).value)
+                accepted_emojis.extend(self.settings.special_guild_emojis.get(str(reaction.message.guild.id)).value)
 
             return str(reaction.emoji) in accepted_emojis
 
