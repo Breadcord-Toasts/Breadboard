@@ -10,8 +10,14 @@ required_stars = 3
 [starboard_channels]
 1111111111111111111 = 11111111111111111111
 
-# The various starboard channels the bot wil serve.
+# The various starboard g the bot wil serve.
 # Keys are the guild IDs and the values are the required star reactions
+# Optional!
+[special_guild_requirements]
+1111111111111111111 = 4
+
+# The various starboard channels the bot wil serve.
+# Keys are the channel IDs and the values are the required star reactions
 # Set to -1 to disbale messages from the channel being put on the starboard
 # Optional!
 [special_channel_requirements]

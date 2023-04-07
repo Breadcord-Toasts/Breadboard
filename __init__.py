@@ -79,10 +79,14 @@ class Breadboard(ModuleCog):
 
         return len(reactions_users)
 
-    def get_required_reactions(self, channel_id: int) -> int:
-        requirement = self.settings.required_stars.value
-        special_channels: SettingsGroup = self.settings.special_channel_requirements
+    def get_required_reactions(self, guild_id: int, channel_id: int) -> int:
+        requirement = max(1, self.settings.required_stars.value)
 
+        special_guilds: SettingsGroup = self.settings.special_guild_requirements
+        if str(guild_id) in special_guilds.keys():
+            requirement = special_guilds.get(str(channel_id)).value
+
+        special_channels: SettingsGroup = self.settings.special_channel_requirements
         if str(channel_id) in special_channels.keys():
             requirement = special_channels.get(str(channel_id)).value
 
@@ -156,7 +160,7 @@ class Breadboard(ModuleCog):
 
         star_reactions = self.filter_reactions(starred_message.reactions)
         unique_reactions = await self.unique_reactions(star_reactions, starred_message.author.id)
-        required_reactions = self.get_required_reactions(starred_message.channel.id)
+        required_reactions = self.get_required_reactions(starred_message.guild.id, starred_message.channel.id)
 
         if required_reactions == -1:
             return
