@@ -7,25 +7,29 @@ required_stars = 3
 
 # The various starboard channels the bot wil serve.
 # Keys are the guild IDs and the values are the respective starboard channel ID
+# Example usage:
+# 1111111111111111111 = 11111111111111111111
 [starboard_channels]
-1111111111111111111 = 11111111111111111111
 
 # The various starboard g the bot wil serve.
 # Keys are the guild IDs and the values are the required star reactions
 # Optional!
+# Example usage:
+# 1111111111111111111 = 4
 [special_guild_requirements]
-1111111111111111111 = 4
 
 # The various starboard channels the bot wil serve.
 # Keys are the channel IDs and the values are the required star reactions
 # Set to -1 to disbale messages from the channel being put on the starboard
 # Optional!
+# Example usage:
+# 1111111111111111111 = 5
 [special_channel_requirements]
-1111111111111111111 = 5
 
 # Custom accepted emojis for certain guilds.
 # Keys are the guild IDs and the values are lists of strings containing either unicode or custom emojis
 # Optional!
+# Example usage:
+# 1111111111111111111 = ["🍞"]
 [special_guild_emojis]
-1111111111111111111 = ["🍞"]
 
