@@ -101,7 +101,11 @@ class Breadboard(ModuleCog):
             allowed_mentions=discord.AllowedMentions.none(),
             avatar_url=avatar.url if avatar else None,
             content=starred_message.content,
-            embeds=starred_message.embeds,
+            embeds=[
+                embed
+                for embed in starred_message.embeds
+                if not embed.to_dict().get("video")  # We can't repost video embeds in a meaningful way
+            ],
             files=[await attachment.to_file() for attachment in starred_message.attachments],
             username=starred_message.author.display_name,
             view=button,
