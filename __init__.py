@@ -104,7 +104,7 @@ class Breadboard(ModuleCog):
             embeds=[
                 embed
                 for embed in starred_message.embeds
-                if not embed.to_dict().get("video")  # We can't repost video embeds in a meaningful way
+                if embed.type == "rich"
             ],
             files=[await attachment.to_file() for attachment in starred_message.attachments],
             username=starred_message.author.display_name,
