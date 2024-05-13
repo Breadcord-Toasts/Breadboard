@@ -140,12 +140,18 @@ class Breadboard(ModuleCog):
         try:
             starboard_message = await webhook.fetch_message(starboard_message_id)
         except discord.NotFound:
-            self.cursor.execute("DELETE FROM starred_messages WHERE original_id = ?", (starred_message_id,))
+            self.cursor.execute(
+                "DELETE FROM starred_messages WHERE original_id = ?",
+                (starred_message_id,)
+            )
             self.connection.commit()
             return
 
         await starboard_message.edit(view=button)
-        self.cursor.execute("UPDATE starred_messages SET star_count = ?", (star_count,))
+        self.cursor.execute(
+            "UPDATE starred_messages SET star_count = ? WHERE original_id = ?",
+            (star_count,)
+        )
         self.connection.commit()
 
     async def on_reaction_update(self, reaction: discord.RawReactionActionEvent) -> None:
