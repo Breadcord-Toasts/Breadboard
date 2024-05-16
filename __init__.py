@@ -150,7 +150,7 @@ class Breadboard(ModuleCog):
         await starboard_message.edit(view=button)
         self.cursor.execute(
             "UPDATE starred_messages SET star_count = ? WHERE original_id = ?",
-            (star_count,)
+            (star_count, starred_message_id),
         )
         self.connection.commit()
 
