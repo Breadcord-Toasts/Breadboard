@@ -230,5 +230,5 @@ class Breadboard(ModuleCog):
         await self.on_reaction_update(reaction)
 
 
-async def setup(bot: breadcord.Bot):
-    await bot.add_cog(Breadboard("breadboard"))
+async def setup(bot: breadcord.Bot, module: breadcord.module.Module) -> None:
+    await bot.add_cog(Breadboard(module.id))
