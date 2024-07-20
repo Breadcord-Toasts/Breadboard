@@ -59,7 +59,7 @@ class Breadboard(ModuleCog):
         def is_accepted(reaction: discord.Reaction) -> bool:
             accepted_emojis: set[str] = set(self.settings.accepted_emojis.value)
 
-            if guild_special_setting := self.settings.special_guild_emojis.get(str(reaction.message.guild.id))
+            if guild_special_setting := self.settings.special_guild_emojis.get(str(reaction.message.guild.id)):
                 accepted_emojis |= set(guild_special_setting.value)
 
             return str(reaction.emoji) in accepted_emojis
