@@ -4,7 +4,7 @@ import sqlite3
 import discord
 
 import breadcord
-from breadcord.config import SettingsGroup
+from breadcord.config import SettingsGroup, Setting
 from breadcord.module import ModuleCog
 
 
@@ -57,10 +57,10 @@ class Breadboard(ModuleCog):
 
     def filter_reactions(self, reactions: list[discord.Reaction]) -> list[discord.Reaction]:
         def is_accepted(reaction: discord.Reaction) -> bool:
-            accepted_emojis: list[str] = list(self.settings.accepted_emojis.value)
+            accepted_emojis: set[str] = set(self.settings.accepted_emojis.value)
 
-            with contextlib.suppress(KeyError):
-                accepted_emojis.extend(self.settings.special_guild_emojis.get(str(reaction.message.guild.id)).value)
+            if guild_special_setting := self.settings.special_guild_emojis.get(str(reaction.message.guild.id))
+                accepted_emojis |= set(guild_special_setting.value)
 
             return str(reaction.emoji) in accepted_emojis
 
