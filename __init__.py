@@ -2,10 +2,12 @@ import dataclasses
 import json
 import sqlite3
 from collections.abc import Callable
-from typing import TYPE_CHECKING, Self, TypedDict
+from typing import TYPE_CHECKING, Self, TypedDict, cast
+
+import discord
+from discord import app_commands
 
 import breadcord
-import discord
 from breadcord.module import ModuleCog
 
 if TYPE_CHECKING:
@@ -96,13 +98,161 @@ def get_top_emoji(reactions_map: dict[AnyEmoji, list[discord.User | discord.Memb
     return most_popular_emoji[0]
 
 
+class ManageEmojiButtons(discord.ui.View):
+    def __init__(self, *, starboard_channel_config: StarboardChannelConfig) -> None:
+        super().__init__()
+        self.starboard_channel_config = starboard_channel_config
+
+    @staticmethod
+    async def request_emoji(interaction: discord.Interaction, *, to_add: bool) -> discord.PartialEmoji | None:
+        modal = EmojiAddRemoveModal(to_add=to_add)
+        await interaction.response.send_modal(modal)
+        await modal.wait()
+        return modal.emoji
+
+    @discord.ui.button(label="Add Emoji", style=discord.ButtonStyle.green)
+    async def add_emoji(self, interaction: discord.Interaction, _) -> None:
+        emoji = await self.request_emoji(interaction, to_add=True)
+        if emoji is None:
+            return
+        self.starboard_channel_config.watched_emojis.append(emoji)
+        await interaction.followup.send(
+            f"Emoji `{discord.utils.escape_markdown(str(emoji))}` added to watched emojis",
+            ephemeral=True,
+        )
+
+    @discord.ui.button(label="Remove Emoji", style=discord.ButtonStyle.red)
+    async def remove_emoji(self, interaction: discord.Interaction, _) -> None:
+        emoji = await self.request_emoji(interaction, to_add=False)
+        if emoji is None:
+            return
+        followup = cast(discord.Webhook, interaction.followup)
+        if emoji not in self.starboard_channel_config.watched_emojis:
+            return await followup.send(
+                f"Emoji `{discord.utils.escape_markdown(str(emoji))}` is not being watched",
+                ephemeral=True,
+            )
+        self.starboard_channel_config.watched_emojis.remove(emoji)
+        await followup.send(
+            f"Emoji `{discord.utils.escape_markdown(str(emoji))}` removed from watched emojis",
+            ephemeral=True,
+        )
+
+
+class EmojiAddRemoveModal(discord.ui.Modal):
+    def __init__(self, to_add: bool) -> None:
+        super().__init__(
+            title=("Add" if to_add else "Remove") + " Emoji",
+            timeout=None,
+        )
+        self.to_add = to_add
+        self.emoji: None | discord.PartialEmoji = None
+
+        self.emoji_input = discord.ui.TextInput(
+            label=f"Emoji to {'add to' if to_add else 'remove from'} watched emojis",
+            placeholder="Enter a unicode or custom (<:name:id>) emoji",
+            min_length=1,
+        )
+        self.add_item(self.emoji_input)
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        self.emoji = discord.PartialEmoji.from_str(self.emoji_input.value)
+        self.stop()
+        await interaction.response.defer()
+
+
 class Breadboard(ModuleCog):
+    command_group = app_commands.Group(
+        name="starboard",
+        description="Manage starboards",
+        default_permissions=None,
+        guild_only=True,
+    )
+
+    @command_group.command(name="add")
+    async def starboard_add_cmd(
+        self,
+        interaction: discord.Interaction,
+        channel: discord.TextChannel,
+        required_reactions: int | None = None,
+    ) -> None:
+        if required_reactions is None:
+            required_reactions = cast(int, self.settings.default_required_stars.value)
+        if required_reactions <= 0:
+            return await interaction.response.send_message("Required reactions must be greater than 0", ephemeral=True)
+        if any(channel.id == config.channel_id for config in self.guild_configs.get(interaction.guild_id, [])):
+            return await interaction.response.send_message(
+                f"Channel is already a starboard. "
+                f"Use `/starboard modify` to change settings, or `/starboard remove` to remove it as a starboard.",
+                ephemeral=True
+            )
+
+        self.guild_configs.setdefault(interaction.guild_id, []).append(StarboardChannelConfig(
+            channel_id=channel.id,
+            required_reactions=required_reactions,
+            watched_emojis=[
+                discord.PartialEmoji.from_str(emoji)
+                for emoji in cast(list[str], self.settings.default_emojis.value)
+            ],
+        ))
+        await interaction.response.send_message(
+            f"Starboard channel added: {channel.mention} with {required_reactions} required reactions",
+            view=ManageEmojiButtons(starboard_channel_config=self.guild_configs[interaction.guild_id][-1]),
+            ephemeral=True,
+        )
+
+    @command_group.command(name="modify")
+    async def starboard_modify_cmd(
+        self,
+        interaction: discord.Interaction,
+        channel: discord.TextChannel,
+        required_reactions: int | None = None,
+    ) -> None:
+        if required_reactions is None:
+            required_reactions = cast(int, self.settings.default_required_stars.value)
+        if required_reactions <= 0:
+            return await interaction.response.send_message("Required reactions must be greater than 0", ephemeral=True)
+        if not any(channel.id == config.channel_id for config in self.guild_configs.get(interaction.guild_id, [])):
+            return await interaction.response.send_message(f"Channel is not a starboard.", ephemeral=True)
+
+        relevant_config: StarboardChannelConfig = next((
+            config
+            for config in self.guild_configs[interaction.guild_id]
+            if config.channel_id == channel.id
+        ))
+        if required_reactions is not None:
+            relevant_config.required_reactions = required_reactions
+            message = f"Modifying starboard channel {channel.mention} to require {required_reactions} reactions"
+        else:
+            message = f"Modifying starboard channel {channel.mention}"
+        await interaction.response.send_message(
+            message,
+            view=ManageEmojiButtons(starboard_channel_config=relevant_config),
+            ephemeral=True,
+        )
+
+    @command_group.command(name="remove")
+    async def starboard_remove_cmd(
+        self,
+        interaction: discord.Interaction,
+        channel: discord.TextChannel,
+    ) -> None:
+        if not any(channel.id == config.channel_id for config in self.guild_configs.get(interaction.guild_id, [])):
+            return await interaction.response.send_message(f"Channel is not a starboard.", ephemeral=True)
+
+        self.guild_configs[interaction.guild_id] = [
+            config
+            for config in self.guild_configs[interaction.guild_id]
+            if config.channel_id != channel.id
+        ]
+        await interaction.response.send_message(f"Starboard channel removed: {channel.mention}", ephemeral=True)
+
     def __init__(self, module_id: str) -> None:
         super().__init__(module_id)
         self.connection = sqlite3.connect(self.module.storage_path / "starred_messages.db")
         self.setup_db(self.connection)
 
-        self._guild_configs_path: Path = self.module.storage_path / "server_config.json"
+        self._guild_configs_path: Path = self.module.storage_path / "guild_configs.json"
         self.guild_configs: GuildConfigs
         if self._guild_configs_path.exists():
             with self._guild_configs_path.open("r", encoding="utf-8") as f:

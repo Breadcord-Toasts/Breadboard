@@ -1,1 +1,3 @@
 webhook_name = "Starboard"
+default_required_stars = 3
+default_emojis = ["⭐"]
