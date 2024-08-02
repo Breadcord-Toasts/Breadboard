@@ -1,3 +1,4 @@
+import asyncio
 import dataclasses
 import json
 import sqlite3
@@ -187,14 +188,23 @@ class Breadboard(ModuleCog):
                 ephemeral=True
             )
 
-        self.guild_configs.setdefault(interaction.guild_id, []).append(StarboardChannelConfig(
+        config = StarboardChannelConfig(
             channel_id=channel.id,
             required_reactions=required_reactions,
             watched_emojis=[
                 discord.PartialEmoji.from_str(emoji)
                 for emoji in cast(list[str], self.settings.default_emojis.value)
             ],
-        ))
+        )
+        try:
+            await self.fetch_starboard_webhook(channel_config=config)
+        except discord.Forbidden:
+            return await interaction.response.send_message(
+                f"The bot doesn't have access to the starboard channel: {channel.mention}",
+                ephemeral=True,
+            )
+
+        self.guild_configs.setdefault(interaction.guild_id, []).append(config)
         await interaction.response.send_message(
             f"Starboard channel added: {channel.mention} with {required_reactions} required reactions",
             view=ManageEmojiButtons(starboard_channel_config=self.guild_configs[interaction.guild_id][-1]),
@@ -263,16 +273,16 @@ class Breadboard(ModuleCog):
                 json.dump({}, f)
 
     async def cog_load(self) -> None:
-        failed: list = []
+        failed: bool = False
         for guild_configs in self.guild_configs.values():
             for channel_config in guild_configs:
                 if channel_config.required_reactions <= 0:
-                    raise ValueError(
-                        f"Starboard channel {channel_config.channel_id} has a required reaction count of 0 or less",
+                    self.logger.error(
+                        f"Starboard channel {channel_config.channel_id} has a required reactions count of 0 or less",
                     )
-                await self.fetch_starboard_webhook(channel_config=channel_config)
+                    failed = True
         if failed:
-            raise ValueError(f"Some configured starboard channels are not text channels: {', '.join(map(str, failed))}")
+            raise RuntimeError("Issues with configuration, see logs for details.")
 
     async def cog_unload(self) -> None:
         self.connection.close()
@@ -280,15 +290,16 @@ class Breadboard(ModuleCog):
             json.dump(self.guild_configs.dump(), f, indent=4)  # TODO: No indent in production
 
     def setup_db(self, connection: sqlite3.Connection) -> None:
-        cursor = connection.cursor()
-        cursor.execute(
+        # TODO: auto migrate v1 -> v2
+        connection.execute(
             "CREATE TABLE IF NOT EXISTS starred_messages ("
             "   original_id INTEGER PRIMARY KEY NOT NULL UNIQUE,"
             "   starboard_message_id INTEGER NOT NULL UNIQUE,"
+            "   starboard_channel_id INTEGER NOT NULL,"
             "   star_count INTEGER NOT NULL"
             ")",
         )
-        self.connection.commit()
+        connection.commit()
 
     async def fetch_message_by_id(self, channel_id: int, message_id: int) -> discord.Message:
         partial_channel = self.bot.get_partial_messageable(channel_id)
@@ -299,6 +310,7 @@ class Breadboard(ModuleCog):
             self.bot.get_channel(channel_config.channel_id)
             or await self.bot.fetch_channel(channel_config.channel_id)
         )
+
         if not isinstance(channel, discord.TextChannel):
             raise ValueError(f"Starboard channel {channel} is not a text channel")
 
