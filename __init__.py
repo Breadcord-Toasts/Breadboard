@@ -93,7 +93,6 @@ def get_top_emoji(reactions_map: dict[AnyEmoji, list[discord.User | discord.Memb
     for emoji, users in reactions_map.items():
         if len(users) > most_popular_emoji[1]:
             most_popular_emoji = (emoji, len(users))
-            print(most_popular_emoji)
     return most_popular_emoji[0]
 
 
@@ -271,6 +270,15 @@ class Breadboard(ModuleCog):
 
         embeds: list[discord.Embed] = [embed for embed in message.embeds if embed.type == "rich"]
         if referencing:
+            attachment_url: str | None = (
+                referencing.attachments[0].url
+                if referencing.attachments
+                else (
+                    referencing.embeds[0].thumbnail.url
+                    if referencing.embeds and referencing.embeds[0].thumbnail
+                    else None
+                )
+            )
             embeds.insert(0, (
                 discord.Embed(
                     description=referencing.content,
@@ -278,6 +286,8 @@ class Breadboard(ModuleCog):
                 ).set_author(
                     name=referencing.author.display_name,
                     icon_url=referencing.author.avatar.url if referencing.author.avatar else None,
+                ).set_image(
+                    url=attachment_url,
                 )
             ))
         unique_reaction_count: int = len({user for users in relevant_reaction_map.values() for user in users})
