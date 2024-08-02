@@ -32,7 +32,6 @@ class StarboardChannelConfig:
     channel_id: ChannelID
     required_reactions: int
     watched_emojis: list[discord.PartialEmoji]
-    extra_check: Callable[[discord.Message], bool] = dataclasses.field(default=lambda _: True, repr=False)
 
     def is_watched(self, emoji: AnyEmoji) -> bool:
         if isinstance(emoji, str):
