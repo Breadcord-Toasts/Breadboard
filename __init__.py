@@ -1,8 +1,6 @@
-import asyncio
 import dataclasses
 import json
 import sqlite3
-from collections.abc import Callable
 from typing import TYPE_CHECKING, Self, TypedDict, cast
 
 import discord
@@ -42,18 +40,18 @@ class StarboardChannelConfig:
         )
 
 
-class GuildConfigs(dict[GuildID, list[StarboardChannelConfig]]):
+class GuildConfigs(dict[GuildID, dict[ChannelID, StarboardChannelConfig]]):
     @classmethod
     def load(cls, config_json: dict[str, list[ChannelConfigDict]]) -> Self:
         return cls({
-            int(guild_id): [  # JSON does not support int keys, which is why we cast
-                StarboardChannelConfig(
+            int(guild_id): {  # JSON does not support int keys, which is why we cast
+                channel["channel_id"]: StarboardChannelConfig(
                     channel_id=channel["channel_id"],
                     required_reactions=channel["required_reactions"],
                     watched_emojis=list(map(discord.PartialEmoji.from_str, channel["extra_emojis"])),
                 )
                 for channel in channels
-            ]
+            }
             for guild_id, channels in config_json.items()
         })
 
@@ -65,7 +63,7 @@ class GuildConfigs(dict[GuildID, list[StarboardChannelConfig]]):
                     "required_reactions": channel.required_reactions,
                     "extra_emojis": list(map(str, channel.watched_emojis)),
                 }
-                for channel in channels
+                for channel in channels.values()
             ]
             for guild_id, channels in self.items()
         }
@@ -180,7 +178,7 @@ class Breadboard(ModuleCog):
             required_reactions = cast(int, self.settings.default_required_stars.value)
         if required_reactions <= 0:
             return await interaction.response.send_message("Required reactions must be greater than 0", ephemeral=True)
-        if any(channel.id == config.channel_id for config in self.guild_configs.get(interaction.guild_id, [])):
+        if channel.id in self.guild_configs.get(interaction.guild_id, {}):
             return await interaction.response.send_message(
                 f"Channel is already a starboard. "
                 f"Use `/starboard modify` to change settings, or `/starboard remove` to remove it as a starboard.",
@@ -203,10 +201,10 @@ class Breadboard(ModuleCog):
                 ephemeral=True,
             )
 
-        self.guild_configs.setdefault(interaction.guild_id, []).append(config)
+        self.guild_configs.setdefault(interaction.guild_id, {})[channel.id] = config
         await interaction.response.send_message(
             f"Starboard channel added: {channel.mention} with {required_reactions} required reactions",
-            view=ManageEmojiButtons(starboard_channel_config=self.guild_configs[interaction.guild_id][-1]),
+            view=ManageEmojiButtons(starboard_channel_config=self.guild_configs[interaction.guild_id][channel.id]),
             ephemeral=True,
         )
 
@@ -221,14 +219,10 @@ class Breadboard(ModuleCog):
             required_reactions = cast(int, self.settings.default_required_stars.value)
         if required_reactions <= 0:
             return await interaction.response.send_message("Required reactions must be greater than 0", ephemeral=True)
-        if not any(channel.id == config.channel_id for config in self.guild_configs.get(interaction.guild_id, [])):
+        if channel.id not in self.guild_configs.get(interaction.guild_id, {}):
             return await interaction.response.send_message(f"Channel is not a starboard.", ephemeral=True)
 
-        relevant_config: StarboardChannelConfig = next((
-            config
-            for config in self.guild_configs[interaction.guild_id]
-            if config.channel_id == channel.id
-        ))
+        relevant_config: StarboardChannelConfig = self.guild_configs[interaction.guild_id][channel.id]
         if required_reactions is not None:
             relevant_config.required_reactions = required_reactions
             message = f"Modifying starboard channel {channel.mention} to require {required_reactions} reactions"
@@ -246,14 +240,10 @@ class Breadboard(ModuleCog):
         interaction: discord.Interaction,
         channel: discord.TextChannel,
     ) -> None:
-        if not any(channel.id == config.channel_id for config in self.guild_configs.get(interaction.guild_id, [])):
+        if channel.id not in self.guild_configs.get(interaction.guild_id, {}):
             return await interaction.response.send_message(f"Channel is not a starboard.", ephemeral=True)
 
-        self.guild_configs[interaction.guild_id] = [
-            config
-            for config in self.guild_configs[interaction.guild_id]
-            if config.channel_id != channel.id
-        ]
+        del self.guild_configs[interaction.guild_id][channel.id]
         await interaction.response.send_message(f"Starboard channel removed: {channel.mention}", ephemeral=True)
 
     def __init__(self, module_id: str) -> None:
@@ -274,7 +264,7 @@ class Breadboard(ModuleCog):
     async def cog_load(self) -> None:
         failed: bool = False
         for guild_configs in self.guild_configs.values():
-            for channel_config in guild_configs:
+            for channel_config in guild_configs.values():
                 if channel_config.required_reactions <= 0:
                     self.logger.error(
                         f"Starboard channel {channel_config.channel_id} has a required reactions count of 0 or less",
@@ -342,12 +332,12 @@ class Breadboard(ModuleCog):
         if reaction_event.guild_id is None or reaction_event.guild_id not in self.guild_configs:
             return
         # We don't want to be able to star messages sent in a starboard channel
-        if any(cfg.channel_id == reaction_event.channel_id for cfg in self.guild_configs[reaction_event.guild_id]):
+        if reaction_event.channel_id in self.guild_configs[reaction_event.guild_id]:
             return
         # A reaction will only ever change things for the config that is watching it
         relevant_configs: list[StarboardChannelConfig] = [
             config
-            for config in self.guild_configs[reaction_event.guild_id]
+            for config in self.guild_configs[reaction_event.guild_id].values()
             if config.is_watched(reaction_event.emoji)
         ]
         if not relevant_configs:
