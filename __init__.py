@@ -19,10 +19,25 @@ MessageID = GenericID
 AnyEmoji = discord.Emoji | discord.PartialEmoji | str
 
 
+class ChannelConfigOverrideDict(TypedDict):
+    override_for: ChannelID
+    required_reactions: int | None
+    extra_emojis: list[str] | None
+
+
 class ChannelConfigDict(TypedDict):
     channel_id: ChannelID
     required_reactions: int
     extra_emojis: list[str]
+
+    channel_overrides: list[ChannelConfigOverrideDict]
+
+
+@dataclasses.dataclass
+class ChannelConfigOverride:
+    override_for: ChannelID
+    required_reactions: int | None = None
+    extra_emojis: list[discord.PartialEmoji] | None = None
 
 
 @dataclasses.dataclass
@@ -30,6 +45,8 @@ class StarboardChannelConfig:
     channel_id: ChannelID
     required_reactions: int
     watched_emojis: list[discord.PartialEmoji]
+
+    channel_overrides: dict[ChannelID, ChannelConfigOverride] = dataclasses.field(default_factory=dict)
 
     def is_watched(self, emoji: AnyEmoji) -> bool:
         if isinstance(emoji, str):
@@ -49,6 +66,16 @@ class GuildConfigs(dict[GuildID, dict[ChannelID, StarboardChannelConfig]]):
                     channel_id=channel["channel_id"],
                     required_reactions=channel["required_reactions"],
                     watched_emojis=list(map(discord.PartialEmoji.from_str, channel["extra_emojis"])),
+                    channel_overrides={
+                        override["override_for"]: ChannelConfigOverride(
+                            override_for=override["override_for"],
+                            required_reactions=override["required_reactions"],
+                            extra_emojis=list(
+                                map(discord.PartialEmoji.from_str, override["extra_emojis"])
+                            ) if override["extra_emojis"] else None,
+                        )
+                        for override in channel.get("channel_overrides", [])
+                    }
                 )
                 for channel in channels
             }
@@ -62,6 +89,14 @@ class GuildConfigs(dict[GuildID, dict[ChannelID, StarboardChannelConfig]]):
                     "channel_id": channel.channel_id,
                     "required_reactions": channel.required_reactions,
                     "extra_emojis": list(map(str, channel.watched_emojis)),
+                    "channel_overrides": [
+                        {
+                            "override_for": override.override_for,
+                            "required_reactions": override.required_reactions,
+                            "extra_emojis": list(map(str, override.extra_emojis)) if override.extra_emojis else None,
+                        }
+                        for override in channel.channel_overrides.values()
+                    ],
                 }
                 for channel in channels.values()
             ]
@@ -96,7 +131,7 @@ def get_top_emoji(reactions_map: dict[AnyEmoji, list[discord.User | discord.Memb
     return most_popular_emoji[0]
 
 
-class ManageEmojiButtons(discord.ui.View):
+class ManageStarboardButtons(discord.ui.View):
     def __init__(self, *, starboard_channel_config: StarboardChannelConfig) -> None:
         super().__init__()
         self.starboard_channel_config = starboard_channel_config
@@ -136,6 +171,19 @@ class ManageEmojiButtons(discord.ui.View):
             ephemeral=True,
         )
 
+    @discord.ui.button(label="Override Config", style=discord.ButtonStyle.blurple)
+    async def override_config(self, interaction: discord.Interaction, _) -> None:
+        modal = OverrideModal()
+        await interaction.response.send_modal(modal)
+        await modal.wait()
+        if modal.override is None:
+            return
+        self.starboard_channel_config.channel_overrides[modal.override.override_for] = modal.override
+        await interaction.followup.send(
+            f"Config overridden for channel {modal.override.override_for}",
+            ephemeral=True,
+        )
+
 
 class EmojiAddRemoveModal(discord.ui.Modal):
     def __init__(self, to_add: bool) -> None:
@@ -155,6 +203,60 @@ class EmojiAddRemoveModal(discord.ui.Modal):
 
     async def on_submit(self, interaction: discord.Interaction) -> None:
         self.emoji = discord.PartialEmoji.from_str(self.emoji_input.value)
+        self.stop()
+        await interaction.response.defer()
+
+
+class OverrideModal(discord.ui.Modal):
+    def __init__(self) -> None:
+        super().__init__(
+            title="Override Config For Channel",
+            timeout=None,
+        )
+        self.override: None | ChannelConfigOverride = None
+
+    channel_input = discord.ui.TextInput(
+        label="Channel to override config for",
+        placeholder="Enter the channel ID",
+        min_length=1,
+        required=True,
+    )
+    required_reactions_input = discord.ui.TextInput(
+        label="Required reactions",
+        placeholder="Enter the required reactions count",
+        required=False,
+    )
+    extra_emojis_input = discord.ui.TextInput(
+        label="Extra emojis as a comma separated list",
+        placeholder="👍, 👎",
+        required=False,
+    )
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        try:
+            channel_input = int(self.channel_input.value)
+        except ValueError:
+            return await interaction.response.send_message("Invalid channel ID", ephemeral=True)
+        required_reactions: int | None = None
+        if self.required_reactions_input.value:
+            try:
+                required_reactions = int(self.required_reactions_input.value)
+            except ValueError:
+                return await interaction.response.send_message("Invalid required reactions count", ephemeral=True)
+            if required_reactions <= 0:
+                return await interaction.response.send_message(
+                    "Required reactions must be greater than 0",
+                    ephemeral=True,
+                )
+
+        self.override = ChannelConfigOverride(
+            override_for=channel_input,
+            required_reactions=required_reactions,
+            extra_emojis=[
+                discord.PartialEmoji.from_str(emoji.strip())
+                for emoji in self.extra_emojis_input.value.split(",")
+            ] if self.extra_emojis_input.value else None,
+        )
         self.stop()
         await interaction.response.defer()
 
@@ -204,7 +306,7 @@ class Breadboard(ModuleCog):
         self.guild_configs.setdefault(interaction.guild_id, {})[channel.id] = config
         await interaction.response.send_message(
             f"Starboard channel added: {channel.mention} with {required_reactions} required reactions",
-            view=ManageEmojiButtons(starboard_channel_config=self.guild_configs[interaction.guild_id][channel.id]),
+            view=ManageStarboardButtons(starboard_channel_config=self.guild_configs[interaction.guild_id][channel.id]),
             ephemeral=True,
         )
 
@@ -230,7 +332,7 @@ class Breadboard(ModuleCog):
             message = f"Modifying starboard channel {channel.mention}"
         await interaction.response.send_message(
             message,
-            view=ManageEmojiButtons(starboard_channel_config=relevant_config),
+            view=ManageStarboardButtons(starboard_channel_config=relevant_config),
             ephemeral=True,
         )
 
@@ -244,6 +346,8 @@ class Breadboard(ModuleCog):
             return await interaction.response.send_message(f"Channel is not a starboard.", ephemeral=True)
 
         del self.guild_configs[interaction.guild_id][channel.id]
+        if not self.guild_configs[interaction.guild_id]:
+            del self.guild_configs[interaction.guild_id]
         await interaction.response.send_message(f"Starboard channel removed: {channel.mention}", ephemeral=True)
 
     def __init__(self, module_id: str) -> None:
