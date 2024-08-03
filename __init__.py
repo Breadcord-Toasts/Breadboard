@@ -389,7 +389,7 @@ class Breadboard(ModuleCog):
     async def cog_unload(self) -> None:
         self.connection.close()
         with self._guild_configs_path.open("w", encoding="utf-8") as f:
-            json.dump(self.guild_configs.dump(), f, indent=4)  # TODO: No indent in production
+            json.dump(self.guild_configs.dump(), f, indent=4, ensure_ascii=False)  # TODO: No indent in production
 
     def setup_db(self, connection: sqlite3.Connection) -> None:
         # TODO: auto migrate v1 -> v2
