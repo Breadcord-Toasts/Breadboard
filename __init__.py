@@ -48,13 +48,22 @@ class StarboardChannelConfig:
 
     channel_overrides: dict[ChannelID, ChannelConfigOverride] = dataclasses.field(default_factory=dict)
 
-    def is_watched(self, emoji: AnyEmoji) -> bool:
+    def is_watched(self, emoji: AnyEmoji, *, channel_id: ChannelID) -> bool:
         if isinstance(emoji, str):
             emoji = discord.PartialEmoji.from_str(emoji)
+
+        watched_emojis = set(self.watched_emojis)
+        if channel_id in self.channel_overrides:
+            watched_emojis.update(self.channel_overrides[channel_id].extra_emojis or [])
         return any(
             watched_emoji == emoji
-            for watched_emoji in self.watched_emojis
+            for watched_emoji in watched_emojis
         )
+
+    def relevant_required_reactions(self, channel_id: ChannelID) -> int:
+        if channel_id in self.channel_overrides:
+            return self.channel_overrides[channel_id].required_reactions or self.required_reactions
+        return self.required_reactions
 
 
 class GuildConfigs(dict[GuildID, dict[ChannelID, StarboardChannelConfig]]):
@@ -442,7 +451,7 @@ class Breadboard(ModuleCog):
         relevant_configs: list[StarboardChannelConfig] = [
             config
             for config in self.guild_configs[reaction_event.guild_id].values()
-            if config.is_watched(reaction_event.emoji)
+            if config.is_watched(reaction_event.emoji, channel_id=reaction_event.channel_id)
         ]
         if not relevant_configs:
             return
@@ -481,7 +490,7 @@ class Breadboard(ModuleCog):
         relevant_reaction_map: dict[AnyEmoji, list[discord.User | discord.Member]] = {
             emoji: users
             for emoji, users in reaction_map.items()
-            if channel_config.is_watched(emoji)
+            if channel_config.is_watched(emoji, channel_id=message.channel.id)
         }
         unique_reaction_count: int = len({user for users in relevant_reaction_map.values() for user in users})
 
@@ -490,7 +499,7 @@ class Breadboard(ModuleCog):
             (message.id,),
         ).fetchone()
 
-        if unique_reaction_count >= channel_config.required_reactions:
+        if unique_reaction_count >= channel_config.relevant_required_reactions(message.channel.id):
             if sql_response is None:  # Newly starred message
                 await self.create_starboard_message(
                     message=message,
