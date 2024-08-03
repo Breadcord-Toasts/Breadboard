@@ -22,6 +22,7 @@ class ChannelConfigOverrideDict(TypedDict):
     override_for: ChannelID
     required_reactions: int | None
     extra_emojis: list[str] | None
+    allow_self_star: bool | None
 
 
 @dataclasses.dataclass
@@ -29,6 +30,7 @@ class ChannelConfigOverride:
     override_for: ChannelID
     required_reactions: int | None = None
     extra_emojis: list[discord.PartialEmoji] | None = None
+    allow_self_star: bool | None = None
 
 
 class ChannelConfigDict(TypedDict):
@@ -39,6 +41,7 @@ class ChannelConfigDict(TypedDict):
     channel_overrides: list[ChannelConfigOverrideDict]
     exclude: list[ChannelID]
     exclude_is_include: bool
+    allow_self_star: bool
 
 
 @dataclasses.dataclass
@@ -51,6 +54,7 @@ class StarboardChannelConfig:
     channel_overrides: dict[ChannelID, ChannelConfigOverride] = dataclasses.field(default_factory=dict)
     exclude: list[ChannelID] = dataclasses.field(default_factory=list)
     exclude_is_include: bool = False
+    allow_self_star: bool = False
 
     def is_watched(self, emoji: AnyEmoji, *, channel_id: ChannelID) -> bool:
         if isinstance(emoji, str):
@@ -110,11 +114,13 @@ class GuildConfigs(dict[GuildID, dict[ChannelID, StarboardChannelConfig]]):
                             "override_for": override.override_for,
                             "required_reactions": override.required_reactions,
                             "extra_emojis": list(map(str, override.extra_emojis)) if override.extra_emojis else None,
+                            "allow_self_star": override.allow_self_star,
                         }
                         for override in channel.channel_overrides.values()
                     ],
                     "exclude": channel.exclude,
                     "exclude_is_include": channel.exclude_is_include,
+                    "allow_self_star": channel.allow_self_star,
                 }
                 for channel in channels.values()
             ]
@@ -296,6 +302,7 @@ class Breadboard(ModuleCog):
         interaction: discord.Interaction,
         channel: discord.TextChannel,
         required_reactions: int | None = None,
+        allow_self_star: bool | None = None,
     ) -> None:
         if required_reactions is None:
             required_reactions = cast(int, self.settings.default_required_stars.value)
@@ -315,6 +322,11 @@ class Breadboard(ModuleCog):
                 discord.PartialEmoji.from_str(emoji)
                 for emoji in cast(list[str], self.settings.default_emojis.value)
             ],
+            allow_self_star=(
+                allow_self_star
+                if allow_self_star is not None else
+                self.settings.default_allow_self_star.value
+            ),
         )
         try:
             await self.fetch_starboard_webhook(channel_config=config)
@@ -340,10 +352,9 @@ class Breadboard(ModuleCog):
         interaction: discord.Interaction,
         channel: discord.TextChannel,
         required_reactions: int | None = None,
+        allow_self_star: bool | None = None,
     ) -> None:
-        if required_reactions is None:
-            required_reactions = cast(int, self.settings.default_required_stars.value)
-        if required_reactions <= 0:
+        if required_reactions is not None and required_reactions <= 0:
             return await interaction.response.send_message("Required reactions must be greater than 0", ephemeral=True)
         if channel.id not in self.guild_configs.get(interaction.guild_id, {}):
             return await interaction.response.send_message(
@@ -352,11 +363,16 @@ class Breadboard(ModuleCog):
             )
 
         relevant_config: StarboardChannelConfig = self.guild_configs[interaction.guild_id][channel.id]
+        message = f"Modifying starboard channel {channel.mention} "
         if required_reactions is not None:
             relevant_config.required_reactions = required_reactions
-            message = f"Modifying starboard channel {channel.mention} to require {required_reactions} reactions"
-        else:
-            message = f"Modifying starboard channel {channel.mention}"
+            message += f"requiring {required_reactions} reactions, "
+        if allow_self_star is not None:
+            relevant_config.allow_self_star = allow_self_star
+            message += f"{'allowing' if allow_self_star else 'disallowing'} self-starring, "
+        start, sep, end = message.rstrip().removesuffix(",").rpartition(", ")
+        message = f"{start} and {end}" if sep else end
+
         await interaction.response.send_message(
             message,
             view=ManageStarboardButtons(starboard_channel_config=relevant_config),
@@ -629,11 +645,7 @@ class Breadboard(ModuleCog):
             return
 
         reaction_map: dict[AnyEmoji, list[discord.User | discord.Member]] = {
-            reaction.emoji: [
-                user
-                async for user in reaction.users()
-                if self.settings.allow_self_star.value or user.id != starred_message.author.id
-            ]
+            reaction.emoji: [user async for user in reaction.users()]
             for reaction in starred_message.reactions
         }
 
@@ -653,7 +665,11 @@ class Breadboard(ModuleCog):
         channel_config: StarboardChannelConfig,
     ) -> None:
         relevant_reaction_map: dict[AnyEmoji, list[discord.User | discord.Member]] = {
-            emoji: users
+            emoji: [
+                user
+                for user in users
+                if channel_config.allow_self_star or user.id != message.author.id
+            ]
             for emoji, users in reaction_map.items()
             if channel_config.is_watched(emoji, channel_id=message.channel.id)
         }
