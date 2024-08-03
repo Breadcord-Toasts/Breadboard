@@ -25,19 +25,19 @@ class ChannelConfigOverrideDict(TypedDict):
     extra_emojis: list[str] | None
 
 
-class ChannelConfigDict(TypedDict):
-    channel_id: ChannelID
-    required_reactions: int
-    extra_emojis: list[str]
-
-    channel_overrides: list[ChannelConfigOverrideDict]
-
-
 @dataclasses.dataclass
 class ChannelConfigOverride:
     override_for: ChannelID
     required_reactions: int | None = None
     extra_emojis: list[discord.PartialEmoji] | None = None
+
+
+class ChannelConfigDict(TypedDict):
+    channel_id: ChannelID
+    required_reactions: int
+    watched_emojis: list[str]
+
+    channel_overrides: list[ChannelConfigOverrideDict]
 
 
 @dataclasses.dataclass
@@ -74,7 +74,7 @@ class GuildConfigs(dict[GuildID, dict[ChannelID, StarboardChannelConfig]]):
                 channel["channel_id"]: StarboardChannelConfig(
                     channel_id=channel["channel_id"],
                     required_reactions=channel["required_reactions"],
-                    watched_emojis=list(map(discord.PartialEmoji.from_str, channel["extra_emojis"])),
+                    watched_emojis=list(map(discord.PartialEmoji.from_str, channel["watched_emojis"])),
                     channel_overrides={
                         override["override_for"]: ChannelConfigOverride(
                             override_for=override["override_for"],
@@ -97,7 +97,7 @@ class GuildConfigs(dict[GuildID, dict[ChannelID, StarboardChannelConfig]]):
                 {
                     "channel_id": channel.channel_id,
                     "required_reactions": channel.required_reactions,
-                    "extra_emojis": list(map(str, channel.watched_emojis)),
+                    "watched_emojis": list(map(str, channel.watched_emojis)),
                     "channel_overrides": [
                         {
                             "override_for": override.override_for,
