@@ -3,11 +3,10 @@ import json
 import sqlite3
 from typing import TYPE_CHECKING, Self, TypedDict, cast
 
-import discord
-from discord import app_commands
-
 import breadcord
+import discord
 from breadcord.module import ModuleCog
+from discord import app_commands
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -80,11 +79,11 @@ class GuildConfigs(dict[GuildID, dict[ChannelID, StarboardChannelConfig]]):
                             override_for=override["override_for"],
                             required_reactions=override["required_reactions"],
                             extra_emojis=list(
-                                map(discord.PartialEmoji.from_str, override["extra_emojis"])
+                                map(discord.PartialEmoji.from_str, override["extra_emojis"]),
                             ) if override["extra_emojis"] else None,
                         )
                         for override in channel.get("channel_overrides", [])
-                    }
+                    },
                 )
                 for channel in channels
             }
@@ -167,7 +166,7 @@ class ManageStarboardButtons(discord.ui.View):
     async def remove_emoji(self, interaction: discord.Interaction, _) -> None:
         emoji = await self.request_emoji(interaction, to_add=False)
         if emoji is None:
-            return
+            return None
         followup = cast(discord.Webhook, interaction.followup)
         if emoji not in self.starboard_channel_config.watched_emojis:
             return await followup.send(
@@ -291,9 +290,9 @@ class Breadboard(ModuleCog):
             return await interaction.response.send_message("Required reactions must be greater than 0", ephemeral=True)
         if channel.id in self.guild_configs.get(interaction.guild_id, {}):
             return await interaction.response.send_message(
-                f"Channel is already a starboard. "
-                f"Use `/starboard modify` to change settings, or `/starboard remove` to remove it as a starboard.",
-                ephemeral=True
+                "Channel is already a starboard. "
+                "Use `/starboard modify` to change settings, or `/starboard remove` to remove it as a starboard.",
+                ephemeral=True,
             )
 
         config = StarboardChannelConfig(
@@ -331,7 +330,7 @@ class Breadboard(ModuleCog):
         if required_reactions <= 0:
             return await interaction.response.send_message("Required reactions must be greater than 0", ephemeral=True)
         if channel.id not in self.guild_configs.get(interaction.guild_id, {}):
-            return await interaction.response.send_message(f"Channel is not a starboard.", ephemeral=True)
+            return await interaction.response.send_message("Channel is not a starboard.", ephemeral=True)
 
         relevant_config: StarboardChannelConfig = self.guild_configs[interaction.guild_id][channel.id]
         if required_reactions is not None:
@@ -352,7 +351,7 @@ class Breadboard(ModuleCog):
         channel: discord.TextChannel,
     ) -> None:
         if channel.id not in self.guild_configs.get(interaction.guild_id, {}):
-            return await interaction.response.send_message(f"Channel is not a starboard.", ephemeral=True)
+            return await interaction.response.send_message("Channel is not a starboard.", ephemeral=True)
 
         del self.guild_configs[interaction.guild_id][channel.id]
         if not self.guild_configs[interaction.guild_id]:
@@ -389,7 +388,7 @@ class Breadboard(ModuleCog):
     async def cog_unload(self) -> None:
         self.connection.close()
         with self._guild_configs_path.open("w", encoding="utf-8") as f:
-            json.dump(self.guild_configs.dump(), f, indent=4, ensure_ascii=False)  # TODO: No indent in production
+            json.dump(self.guild_configs.dump(), f, indent=4, ensure_ascii=False)
 
     def setup_db(self, connection: sqlite3.Connection) -> None:
         # TODO: auto migrate v1 -> v2

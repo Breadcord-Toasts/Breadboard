@@ -27,6 +27,9 @@ select = [
 ignore = [
     # Doesn't make sense for modules
     "N999",
+
+    # I don't like this.
+    "RET503",
 ]
 
 [tool.ruff]
