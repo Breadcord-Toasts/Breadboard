@@ -468,7 +468,11 @@ class Breadboard(ModuleCog):
             return
 
         reaction_map: dict[AnyEmoji, list[discord.User | discord.Member]] = {
-            reaction.emoji: [user async for user in reaction.users()]
+            reaction.emoji: [
+                user
+                async for user in reaction.users()
+                if self.settings.allow_self_star.value or user.id != starred_message.author.id
+            ]
             for reaction in starred_message.reactions
         }
 
