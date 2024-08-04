@@ -96,6 +96,7 @@ class GuildConfigs(dict[GuildID, dict[ChannelID, StarboardChannelConfig]]):
                     },
                     exclude=channel.get("exclude", []),
                     exclude_is_include=channel.get("exclude_is_include", False),
+                    allow_self_star=channel.get("allow_self_star", False),
                 )
                 for channel in channels
             }
@@ -753,8 +754,9 @@ class Breadboard(ModuleCog):
         )
 
         self.connection.execute(
-            "INSERT INTO starred_messages (original_id, starboard_message_id, star_count) VALUES (?, ?, ?)",
-            (message.id, webhook_msg.id, unique_reaction_count),
+            "INSERT INTO starred_messages (original_id, starboard_message_id, starboard_channel_id, star_count) "
+            "VALUES (?, ?, ?, ?)",
+            (message.id, webhook_msg.id, config.channel_id, unique_reaction_count),
         )
         self.connection.commit()
 
