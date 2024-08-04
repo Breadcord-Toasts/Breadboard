@@ -1,4 +1,5 @@
 import dataclasses
+import io
 import json
 import sqlite3
 from typing import TYPE_CHECKING, Self, TypedDict, cast
@@ -713,37 +714,31 @@ class Breadboard(ModuleCog):
         config: StarboardChannelConfig,
     ) -> None:
         webhook = await self.fetch_starboard_webhook(channel_config=config)
+        unique_reaction_count: int = len({user for users in relevant_reaction_map.values() for user in users})
 
         embeds: list[discord.Embed] = [embed for embed in message.embeds if embed.type == "rich"]
+        files: list[discord.File] = [await attachment.to_file() for attachment in message.attachments]
+
         if referencing:
-            attachment_url: str | None = (
-                referencing.attachments[0].url
-                if referencing.attachments
-                else (
-                    referencing.embeds[0].thumbnail.url
-                    if referencing.embeds and referencing.embeds[0].thumbnail
-                    else None
-                )
-            )
-            embeds.insert(0, (
-                discord.Embed(
-                    description=referencing.content,
-                    url=referencing.jump_url,
-                ).set_author(
-                    name=referencing.author.display_name,
-                    icon_url=referencing.author.avatar.url if referencing.author.avatar else None,
-                ).set_image(
-                    url=attachment_url,
-                )
-            ))
-        unique_reaction_count: int = len({user for users in relevant_reaction_map.values() for user in users})
+            reply_text = f"-# Replying to {referencing.author.mention}\n"
+            for line in referencing.content.splitlines():
+                line = line.removeprefix('-# ')
+                reply_text += f"> -# {line}\n" if line else "> _ _\n"
+            reply_text += "\n"
+
+            if len(reply_text + message.content) <= 2000:
+                message.content = reply_text + message.content
+
+        if message.stickers:
+            for sticker in message.stickers:
+                files.append(await sticker.to_file())
 
         webhook_msg = await webhook.send(
             username=message.author.display_name,
             avatar_url=avatar.url if (avatar := message.author.avatar) else None,
             content=message.content,
             embeds=embeds[:10],
-            files=[await attachment.to_file() for attachment in message.attachments],
+            files=files[:10],
             allowed_mentions=discord.AllowedMentions.none(),
             view=OriginalMessageButton(
                 original_message_url=message.jump_url,
