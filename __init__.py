@@ -753,12 +753,16 @@ class Breadboard(ModuleCog):
             wait=True,
         )
 
-        self.connection.execute(
-            "INSERT INTO starred_messages (original_id, starboard_message_id, starboard_channel_id, star_count) "
-            "VALUES (?, ?, ?, ?)",
-            (message.id, webhook_msg.id, config.channel_id, unique_reaction_count),
-        )
-        self.connection.commit()
+        try:
+            self.connection.execute(
+                "INSERT INTO starred_messages (original_id, starboard_message_id, starboard_channel_id, star_count) "
+                "VALUES (?, ?, ?, ?)",
+                (message.id, webhook_msg.id, config.channel_id, unique_reaction_count),
+            )
+        except sqlite3.IntegrityError:  # Message was already starred, this resolves a race condition
+            await webhook.delete_message(webhook_msg.id)
+        else:
+            self.connection.commit()
 
     async def update_starboard_message_button(
         self,
