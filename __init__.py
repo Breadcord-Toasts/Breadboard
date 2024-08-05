@@ -1,5 +1,4 @@
 import dataclasses
-import io
 import json
 import sqlite3
 from typing import TYPE_CHECKING, Self, TypedDict, cast
