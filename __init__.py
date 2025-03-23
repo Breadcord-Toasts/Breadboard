@@ -205,6 +205,13 @@ class ManageStarboardButtons(discord.ui.View):
             ephemeral=True,
         )
 
+    @discord.ui.button(label="Get Watched Emojis", style=discord.ButtonStyle.grey)
+    async def list_emojis(self, interaction: discord.Interaction, _) -> None:
+        await interaction.response.send_message(
+            f"Watched emojis: {', '.join(map(str, self.starboard_channel_config.watched_emojis)) or 'None'}",
+            ephemeral=True,
+        )
+
     @discord.ui.button(label="Override Config", style=discord.ButtonStyle.blurple)
     async def override_config(self, interaction: discord.Interaction, _) -> None:
         modal = OverrideModal()
