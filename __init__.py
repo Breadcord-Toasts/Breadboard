@@ -95,9 +95,10 @@ class GuildConfigs(dict[GuildID, dict[ChannelID, StarboardChannelConfig]]):
                         override["override_for"]: ChannelConfigOverride(
                             override_for=override["override_for"],
                             required_reactions=override.get("required_reactions"),
-                            extra_emojis=list(
-                                map(discord.PartialEmoji.from_str, override["extra_emojis"]),
-                            ) if override.get("extra_emojis") else None,
+                            extra_emojis=[
+                                discord.PartialEmoji.from_str(emoji)
+                                for emoji in override.get("extra_emojis") or []
+                            ] or None,
                             allow_self_star=override.get("allow_self_star"),
                             allow_any_emoji=override.get("allow_any_emoji"),
                         )
@@ -161,11 +162,7 @@ class OriginalMessageButton(discord.ui.View):
 
 
 def get_top_emoji(reactions_map: dict[AnyEmoji, list[discord.User | discord.Member]]) -> AnyEmoji:
-    most_popular_emoji: tuple[AnyEmoji, int] = (next(iter(reactions_map.keys())), 0)
-    for emoji, users in reactions_map.items():
-        if len(users) > most_popular_emoji[1]:
-            most_popular_emoji = (emoji, len(users))
-    return most_popular_emoji[0]
+    return max(reactions_map, key=lambda emoji: len(reactions_map[emoji]))
 
 
 class ManageStarboardButtons(discord.ui.View):
@@ -341,7 +338,7 @@ class Breadboard(ModuleCog):
             required_reactions = cast(int, self.settings.default_required_stars.value)
         if required_reactions <= 0:
             return await interaction.response.send_message("Required reactions must be greater than 0", ephemeral=True)
-        if channel.id in self.guild_configs.get(interaction.guild_id, {}):
+        if channel.id in self.guild_configs.get(cast(GuildID, interaction.guild_id), {}):
             return await interaction.response.send_message(
                 f"Channel {channel.mention} is already a starboard. "
                 "Use `/starboard modify` to change settings, or `/starboard remove` to remove it as a starboard.",
@@ -358,12 +355,12 @@ class Breadboard(ModuleCog):
             allow_self_star=(
                 allow_self_star
                 if allow_self_star is not None else
-                self.settings.default_allow_self_star.value
+                cast(bool, self.settings.default_allow_self_star.value)
             ),
             allow_any_emoji=(
                 allow_any_emoji
                 if allow_any_emoji is not None else
-                self.settings.default_allow_any_emoji.value
+                cast(bool, self.settings.default_allow_any_emoji.value)
             ),
         )
         try:
@@ -374,10 +371,13 @@ class Breadboard(ModuleCog):
                 ephemeral=True,
             )
 
-        self.guild_configs.setdefault(interaction.guild_id, {})[channel.id] = config
+        guild_id = cast(GuildID, interaction.guild_id)
+        channel_id = cast(ChannelID, channel.id)
+        self.guild_configs.setdefault(guild_id, {})[channel_id] = config
         await interaction.response.send_message(
             f"Starboard channel added: {channel.mention} with {required_reactions} required reactions",
-            view=ManageStarboardButtons(starboard_channel_config=self.guild_configs[interaction.guild_id][channel.id]),
+            view=ManageStarboardButtons(
+                starboard_channel_config=self.guild_configs[guild_id][channel_id]),
             ephemeral=True,
         )
 
@@ -395,13 +395,13 @@ class Breadboard(ModuleCog):
     ) -> None:
         if required_reactions is not None and required_reactions <= 0:
             return await interaction.response.send_message("Required reactions must be greater than 0", ephemeral=True)
-        if channel.id not in self.guild_configs.get(interaction.guild_id, {}):
+        if channel.id not in self.guild_configs.get(cast(GuildID, interaction.guild_id), {}):
             return await interaction.response.send_message(
                 f"Channel {channel.mention} is not a starboard. Use `/starboard add` to add it as a starboard.",
                 ephemeral=True
             )
 
-        relevant_config: StarboardChannelConfig = self.guild_configs[interaction.guild_id][channel.id]
+        relevant_config: StarboardChannelConfig = self.guild_configs[cast(GuildID, interaction.guild_id)][channel.id]
         message = f"Modifying starboard channel {channel.mention} "
         if required_reactions is not None:
             relevant_config.required_reactions = required_reactions
@@ -430,15 +430,16 @@ class Breadboard(ModuleCog):
         interaction: discord.Interaction,
         channel: discord.TextChannel,
     ) -> None:
-        if channel.id not in self.guild_configs.get(interaction.guild_id, {}):
+        guild_id = cast(GuildID, interaction.guild_id)
+        if channel.id not in self.guild_configs.get(guild_id, {}):
             return await interaction.response.send_message(
                 f"Channel {channel.mention} is not a starboard.",
                 ephemeral=True,
             )
 
-        del self.guild_configs[interaction.guild_id][channel.id]
-        if not self.guild_configs[interaction.guild_id]:
-            del self.guild_configs[interaction.guild_id]
+        del self.guild_configs[guild_id][channel.id]
+        if not self.guild_configs[guild_id]:
+            del self.guild_configs[guild_id]
         await interaction.response.send_message(f"Starboard channel removed: {channel.mention}", ephemeral=True)
 
     @command_group.command(
@@ -450,7 +451,7 @@ class Breadboard(ModuleCog):
             return await interaction.response.send_message("No starboard channels configured.", ephemeral=True)
         await interaction.response.send_message(
             "Starboard channels in this guild: "
-            + ", ".join(f"<#{channel_id}>" for channel_id in self.guild_configs[interaction.guild_id]),
+            + ", ".join(f"<#{channel_id}>" for channel_id in self.guild_configs[cast(GuildID, interaction.guild_id)]),
             ephemeral=True,
         )
 
@@ -472,12 +473,13 @@ class Breadboard(ModuleCog):
         starboard_channel: discord.TextChannel,
         exclude_channel: discord.abc.GuildChannel,
     ) -> None:
-        if starboard_channel.id not in self.guild_configs.get(interaction.guild_id, {}):
+        guild_id = cast(GuildID, interaction.guild_id)
+        if starboard_channel.id not in self.guild_configs.get(guild_id, {}):
             return await interaction.response.send_message(
                 f"Channel {starboard_channel.mention} is not a starboard.",
                 ephemeral=True,
             )
-        relevant_config: StarboardChannelConfig = self.guild_configs[interaction.guild_id][starboard_channel.id]
+        relevant_config: StarboardChannelConfig = self.guild_configs[guild_id][starboard_channel.id]
         if exclude_channel.id in relevant_config.exclude:
             return await interaction.response.send_message(
                 f"Channel {exclude_channel.mention} is already excluded from {starboard_channel.mention}",
@@ -493,18 +495,19 @@ class Breadboard(ModuleCog):
         name="remove",
         description="Remove a channel from the exclusion list",
     )
-    async def starboard_exclude_add_cmd(
+    async def starboard_exclude_remove_cmd(
         self,
         interaction: discord.Interaction,
         starboard_channel: discord.TextChannel,
         exclude_channel: discord.abc.GuildChannel,
     ) -> None:
-        if starboard_channel.id not in self.guild_configs.get(interaction.guild_id, {}):
+        guild_id = cast(GuildID, interaction.guild_id)
+        if starboard_channel.id not in self.guild_configs.get(guild_id, {}):
             return await interaction.response.send_message(
                 f"Channel {starboard_channel.mention} is not a starboard.",
                 ephemeral=True,
             )
-        relevant_config: StarboardChannelConfig = self.guild_configs[interaction.guild_id][starboard_channel.id]
+        relevant_config: StarboardChannelConfig = self.guild_configs[guild_id][starboard_channel.id]
         if exclude_channel.id not in relevant_config.exclude:
             return await interaction.response.send_message(
                 f"Channel {exclude_channel.mention} is not excluded from {starboard_channel.mention}",
@@ -525,20 +528,20 @@ class Breadboard(ModuleCog):
         interaction: discord.Interaction,
         starboard_channel: discord.TextChannel,
     ) -> None:
-        if starboard_channel.id not in self.guild_configs.get(interaction.guild_id, {}):
+        guild_id = cast(GuildID, interaction.guild_id)
+        if starboard_channel.id not in self.guild_configs.get(guild_id, {}):
             return await interaction.response.send_message(
                 f"Channel {starboard_channel.mention} is not a starboard.",
                 ephemeral=True,
             )
-        relevant_config: StarboardChannelConfig = self.guild_configs[interaction.guild_id][starboard_channel.id]
+        relevant_config: StarboardChannelConfig = self.guild_configs[guild_id][starboard_channel.id]
         if not relevant_config.exclude:
             return await interaction.response.send_message(
                 f"No channels are excluded from {starboard_channel.mention}",
                 ephemeral=True,
             )
         await interaction.response.send_message(
-            f"Excluded channels for {starboard_channel.mention}: "
-            + ", ".join(f"<#{channel_id}>" for channel_id in relevant_config.exclude),
+            f"Excluded channels for {starboard_channel.mention}: " + ", ".join(f"<#{channel_id}>" for channel_id in relevant_config.exclude),
             ephemeral=True,
         )
 
@@ -552,12 +555,13 @@ class Breadboard(ModuleCog):
         starboard_channel: discord.TextChannel,
         is_whitelist: bool | None = None,
     ) -> None:
-        if starboard_channel.id not in self.guild_configs.get(interaction.guild_id, {}):
+        guild_id = cast(GuildID, interaction.guild_id)
+        if starboard_channel.id not in self.guild_configs.get(guild_id, {}):
             return await interaction.response.send_message(
                 f"Channel {starboard_channel.mention} is not a starboard.",
                 ephemeral=True,
             )
-        relevant_config: StarboardChannelConfig = self.guild_configs[interaction.guild_id][starboard_channel.id]
+        relevant_config: StarboardChannelConfig = self.guild_configs[guild_id][starboard_channel.id]
         if is_whitelist is None:
             is_whitelist = not relevant_config.exclude_is_include
 
@@ -576,12 +580,12 @@ class Breadboard(ModuleCog):
         self._guild_configs_path: Path = self.module.storage_path / "guild_configs.json"
         self.guild_configs: GuildConfigs
         if self._guild_configs_path.exists():
-            with self._guild_configs_path.open("r", encoding="utf-8") as f:
-                self.guild_configs = GuildConfigs.load(json.load(f))
+            with self._guild_configs_path.open("r", encoding="utf-8") as file:
+                self.guild_configs = GuildConfigs.load(json.load(file))
         else:
             self.guild_configs = GuildConfigs()
-            with self._guild_configs_path.open("w", encoding="utf-8") as f:
-                json.dump({}, f)
+            with self._guild_configs_path.open("w", encoding="utf-8") as file:
+                json.dump({}, file)
 
     async def cog_load(self) -> None:
         failed: bool = False
@@ -597,8 +601,13 @@ class Breadboard(ModuleCog):
 
     async def cog_unload(self) -> None:
         self.connection.close()
-        with self._guild_configs_path.open("w", encoding="utf-8") as f:
-            json.dump(self.guild_configs.dump(), f, indent=4, ensure_ascii=False)
+        with self._guild_configs_path.open("w", encoding="utf-8") as file:
+            json.dump(
+                self.guild_configs.dump(),
+                file,
+                ensure_ascii=False,
+                indent=4 if self.bot.settings.debug else None,
+            )
 
     @staticmethod
     def setup_db(connection: sqlite3.Connection) -> None:
