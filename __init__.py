@@ -149,7 +149,6 @@ class OriginalMessageButton(discord.ui.View):
         original_message_url: str,
         star_count: int,
         star_emoji: discord.PartialEmoji | discord.Emoji | str = "⭐",
-        wrap_view: discord.ui.View | None = None,
     ) -> None:
         super().__init__()
         self.add_item(
