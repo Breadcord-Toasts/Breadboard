@@ -149,6 +149,7 @@ class OriginalMessageButton(discord.ui.View):
         original_message_url: str,
         star_count: int,
         star_emoji: discord.PartialEmoji | discord.Emoji | str = "⭐",
+        wrap_view: discord.ui.View | None = None,
     ) -> None:
         super().__init__()
         self.add_item(
@@ -287,18 +288,21 @@ class OverrideModal(discord.ui.Modal):
         try:
             channel_input = int(self.channel_input.value)
         except ValueError:
-            return await interaction.response.send_message("Invalid channel ID", ephemeral=True)
+            await interaction.response.send_message("Invalid channel ID", ephemeral=True)
+            return
         required_reactions: int | None = None
         if self.required_reactions_input.value:
             try:
                 required_reactions = int(self.required_reactions_input.value)
             except ValueError:
-                return await interaction.response.send_message("Invalid required reactions count", ephemeral=True)
+                await interaction.response.send_message("Invalid required reactions count", ephemeral=True)
+                return
             if required_reactions <= 0:
-                return await interaction.response.send_message(
+                await interaction.response.send_message(
                     "Required reactions must be greater than 0",
                     ephemeral=True,
                 )
+                return
 
         def parse_bool(value: str) -> bool | None:
             if value.lower().strip().startswith(("t", "y")):
@@ -344,13 +348,15 @@ class Breadboard(ModuleCog):
         if required_reactions is None:
             required_reactions = cast(int, self.settings.default_required_stars.value)
         if required_reactions <= 0:
-            return await interaction.response.send_message("Required reactions must be greater than 0", ephemeral=True)
+            await interaction.response.send_message("Required reactions must be greater than 0", ephemeral=True)
+            return
         if channel.id in self.guild_configs.get(cast(GuildID, interaction.guild_id), {}):
-            return await interaction.response.send_message(
+            await interaction.response.send_message(
                 f"Channel {channel.mention} is already a starboard. "
                 "Use `/starboard modify` to change settings, or `/starboard remove` to remove it as a starboard.",
                 ephemeral=True,
             )
+            return
 
         config = StarboardChannelConfig(
             channel_id=channel.id,
@@ -373,10 +379,11 @@ class Breadboard(ModuleCog):
         try:
             await self.fetch_starboard_webhook(channel_config=config)
         except discord.Forbidden:
-            return await interaction.response.send_message(
+            await interaction.response.send_message(
                 f"The bot doesn't have access to the starboard channel: {channel.mention}",
                 ephemeral=True,
             )
+            return
 
         guild_id = cast(GuildID, interaction.guild_id)
         channel_id = cast(ChannelID, channel.id)
@@ -401,12 +408,14 @@ class Breadboard(ModuleCog):
         allow_any_emoji: bool | None = None,
     ) -> None:
         if required_reactions is not None and required_reactions <= 0:
-            return await interaction.response.send_message("Required reactions must be greater than 0", ephemeral=True)
+            await interaction.response.send_message("Required reactions must be greater than 0", ephemeral=True)
+            return
         if channel.id not in self.guild_configs.get(cast(GuildID, interaction.guild_id), {}):
-            return await interaction.response.send_message(
+            await interaction.response.send_message(
                 f"Channel {channel.mention} is not a starboard. Use `/starboard add` to add it as a starboard.",
                 ephemeral=True
             )
+            return
 
         relevant_config: StarboardChannelConfig = self.guild_configs[cast(GuildID, interaction.guild_id)][channel.id]
         message = f"Modifying starboard channel {channel.mention} "
@@ -439,10 +448,11 @@ class Breadboard(ModuleCog):
     ) -> None:
         guild_id = cast(GuildID, interaction.guild_id)
         if channel.id not in self.guild_configs.get(guild_id, {}):
-            return await interaction.response.send_message(
+            await interaction.response.send_message(
                 f"Channel {channel.mention} is not a starboard.",
                 ephemeral=True,
             )
+            return
 
         del self.guild_configs[guild_id][channel.id]
         if not self.guild_configs[guild_id]:
@@ -455,7 +465,8 @@ class Breadboard(ModuleCog):
     )
     async def starboard_list_cmd(self, interaction: discord.Interaction) -> None:
         if interaction.guild_id not in self.guild_configs:
-            return await interaction.response.send_message("No starboard channels configured.", ephemeral=True)
+            await interaction.response.send_message("No starboard channels configured.", ephemeral=True)
+            return
         await interaction.response.send_message(
             "Starboard channels in this guild: "
             + ", ".join(f"<#{channel_id}>" for channel_id in self.guild_configs[cast(GuildID, interaction.guild_id)]),
@@ -482,16 +493,18 @@ class Breadboard(ModuleCog):
     ) -> None:
         guild_id = cast(GuildID, interaction.guild_id)
         if starboard_channel.id not in self.guild_configs.get(guild_id, {}):
-            return await interaction.response.send_message(
+            await interaction.response.send_message(
                 f"Channel {starboard_channel.mention} is not a starboard.",
                 ephemeral=True,
             )
+            return
         relevant_config: StarboardChannelConfig = self.guild_configs[guild_id][starboard_channel.id]
         if exclude_channel.id in relevant_config.exclude:
-            return await interaction.response.send_message(
+            await interaction.response.send_message(
                 f"Channel {exclude_channel.mention} is already excluded from {starboard_channel.mention}",
                 ephemeral=True,
             )
+            return
         relevant_config.exclude.append(exclude_channel.id)
         await interaction.response.send_message(
             f"Channel {exclude_channel.mention} excluded from {starboard_channel.mention}",
@@ -510,16 +523,18 @@ class Breadboard(ModuleCog):
     ) -> None:
         guild_id = cast(GuildID, interaction.guild_id)
         if starboard_channel.id not in self.guild_configs.get(guild_id, {}):
-            return await interaction.response.send_message(
+            await interaction.response.send_message(
                 f"Channel {starboard_channel.mention} is not a starboard.",
                 ephemeral=True,
             )
+            return
         relevant_config: StarboardChannelConfig = self.guild_configs[guild_id][starboard_channel.id]
         if exclude_channel.id not in relevant_config.exclude:
-            return await interaction.response.send_message(
+            await interaction.response.send_message(
                 f"Channel {exclude_channel.mention} is not excluded from {starboard_channel.mention}",
                 ephemeral=True,
             )
+            return
         relevant_config.exclude.remove(exclude_channel.id)
         await interaction.response.send_message(
             f"Channel {exclude_channel.mention} removed from exclusion list of {starboard_channel.mention}",
@@ -537,18 +552,21 @@ class Breadboard(ModuleCog):
     ) -> None:
         guild_id = cast(GuildID, interaction.guild_id)
         if starboard_channel.id not in self.guild_configs.get(guild_id, {}):
-            return await interaction.response.send_message(
+            await interaction.response.send_message(
                 f"Channel {starboard_channel.mention} is not a starboard.",
                 ephemeral=True,
             )
+            return
         relevant_config: StarboardChannelConfig = self.guild_configs[guild_id][starboard_channel.id]
         if not relevant_config.exclude:
-            return await interaction.response.send_message(
+            await interaction.response.send_message(
                 f"No channels are excluded from {starboard_channel.mention}",
                 ephemeral=True,
             )
+            return
         await interaction.response.send_message(
-            f"Excluded channels for {starboard_channel.mention}: " + ", ".join(f"<#{channel_id}>" for channel_id in relevant_config.exclude),
+            f"Excluded channels for {starboard_channel.mention}: "
+            + ", ".join(f"<#{channel_id}>" for channel_id in relevant_config.exclude),
             ephemeral=True,
         )
 
@@ -564,10 +582,11 @@ class Breadboard(ModuleCog):
     ) -> None:
         guild_id = cast(GuildID, interaction.guild_id)
         if starboard_channel.id not in self.guild_configs.get(guild_id, {}):
-            return await interaction.response.send_message(
+            await interaction.response.send_message(
                 f"Channel {starboard_channel.mention} is not a starboard.",
                 ephemeral=True,
             )
+            return
         relevant_config: StarboardChannelConfig = self.guild_configs[guild_id][starboard_channel.id]
         if is_whitelist is None:
             is_whitelist = not relevant_config.exclude_is_include
@@ -775,38 +794,71 @@ class Breadboard(ModuleCog):
     ) -> None:
         webhook = await self.fetch_starboard_webhook(channel_config=config)
         unique_reaction_count: int = len({user for users in relevant_reaction_map.values() for user in users})
+                        
 
-        embeds: list[discord.Embed] = [embed for embed in message.embeds if embed.type == "rich"]
-        files: list[discord.File] = [await attachment.to_file() for attachment in message.attachments]
-
-        if referencing:
-            reply_text = f"-# Replying to {referencing.author.mention}\n"
-            for line in referencing.content.splitlines():
-                line = line.removeprefix('-# ')
-                reply_text += f"> -# {line}\n" if line else "> _ _\n"
-            reply_text += "\n"
-
-            if len(reply_text + message.content) <= 2000:
-                message.content = reply_text + message.content
-
-        if message.stickers:
-            for sticker in message.stickers:
+        async def post_to_starboard():
+            abstract_message: discord.Message | discord.MessageSnapshot = message
+            if message.reference and message.reference.type is discord.MessageReferenceType.forward:
+                abstract_message = message.message_snapshots[-1]
+                
+            embeds: list[discord.Embed] = [embed for embed in abstract_message.embeds if embed.type == "rich"]
+            files: list[discord.File] = [await attachment.to_file() for attachment in abstract_message.attachments]
+            for sticker in abstract_message.stickers:
                 files.append(await sticker.to_file())
 
-        webhook_msg = await webhook.send(
-            username=message.author.display_name,
-            avatar_url=avatar.url if (avatar := message.author.avatar) else None,
-            content=message.content,
-            embeds=embeds[:10],
-            files=files[:10],
-            allowed_mentions=discord.AllowedMentions.none(),
-            view=OriginalMessageButton(
-                original_message_url=message.jump_url,
-                star_count=unique_reaction_count,
-                star_emoji=get_top_emoji(relevant_reaction_map),
-            ),
-            wait=True,
-        )
+            if not (message.reference and message.reference.type is discord.MessageReferenceType.forward):
+                # Normal message path
+                if len(message.content) > 2000:
+                    message.content = message.content[:2000-3] + "..."
+                elif referencing:
+                    reply_text = f"-# Replying to {referencing.author.mention}\n"
+                    for line in referencing.content.splitlines():
+                        line = line.removeprefix('-# ')
+                        reply_text += f"> -# {line}\n" if line.lstrip() else "> _ _\n"
+                    reply_text += "\n"
+                    if len(reply_text + message.content) <= 2000:
+                        message.content = reply_text + message.content
+                return await webhook.send(
+                    wait=True,
+                    view=OriginalMessageButton(
+                        original_message_url=message.jump_url,
+                        star_count=unique_reaction_count,
+                        star_emoji=get_top_emoji(relevant_reaction_map),
+                    ),
+                    allowed_mentions=discord.AllowedMentions.none(),
+
+                    username=message.author.display_name,
+                    avatar_url=avatar.url if (avatar := message.author.avatar) else None,
+                    content=message.content,
+                    embeds=embeds[:10],
+                    files=files[:10],
+                )
+            else:
+                # Forwarded message path
+                snapshot = message.message_snapshots[-1]
+                guild = None if message.reference.guild_id is None else (
+                    self.bot.get_guild(message.reference.guild_id)
+                    or await self.bot.fetch_guild(message.reference.guild_id)
+                )
+                if len(snapshot.content) > 2000:
+                    snapshot.content = snapshot.content[:2000-3] + "..."
+                return await webhook.send(
+                    wait=True,
+                    view=OriginalMessageButton(
+                        original_message_url=message.jump_url,
+                        star_count=unique_reaction_count,
+                        star_emoji=get_top_emoji(relevant_reaction_map),
+                    ),
+                    allowed_mentions=discord.AllowedMentions.none(),
+
+                    username=f"(Guild) {guild.name}" if guild is not None else "Unknown Guild",
+                    avatar_url=guild.icon.url if guild is not None and guild.icon else webhook.default_avatar,
+                    content=snapshot.content,
+                    embeds=embeds[:10],
+                    files=files[:10],
+                )
+
+        webhook_msg = await post_to_starboard()
 
         try:
             self.connection.execute(
