@@ -689,6 +689,12 @@ class Breadboard(ModuleCog):
         if not relevant_configs:
             return
 
+        if not any(
+            config.is_watched(reaction_event.emoji, channel_id=reaction_event.channel_id)
+            for config in relevant_configs
+        ):
+            return
+
         try:
             starred_message: discord.Message = await self.fetch_message_by_id(
                 channel_id=reaction_event.channel_id,
