@@ -584,15 +584,13 @@ class Breadboard(ModuleCog):
         self.connection = sqlite3.connect(self.module.storage_path / "starred_messages.db")
         self.setup_db(self.connection)
 
-        self._guild_configs_path: Path = self.module.storage_path / "guild_configs.json"
+        self._guild_configs_file_path: Path = self.module.storage_path / "guild_configs.json"
         self.guild_configs: GuildConfigs
-        if self._guild_configs_path.exists():
-            with self._guild_configs_path.open("r", encoding="utf-8") as file:
+        if self._guild_configs_file_path.is_file():
+            with self._guild_configs_file_path.open("r", encoding="utf-8") as file:
                 self.guild_configs = GuildConfigs.load(json.load(file))
         else:
             self.guild_configs = GuildConfigs()
-            with self._guild_configs_path.open("w", encoding="utf-8") as file:
-                json.dump({}, file)
 
     async def cog_load(self) -> None:
         failed: bool = False
@@ -608,7 +606,7 @@ class Breadboard(ModuleCog):
 
     async def cog_unload(self) -> None:
         self.connection.close()
-        with self._guild_configs_path.open("w", encoding="utf-8") as file:
+        with self._guild_configs_file_path.open("w", encoding="utf-8") as file:
             json.dump(
                 self.guild_configs.dump(),
                 file,
